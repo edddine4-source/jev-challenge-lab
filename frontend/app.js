@@ -223,6 +223,63 @@ const challengeExamples = {
       { type: "noul", name: "policy_compliant", instructions: "Does the recommended action comply with every hard mission constraint?", criteria: ["All hard constraints are satisfied", "At least one hard constraint is violated"] },
     ],
   },
+  incident: {
+    format: "json",
+    contextFacts: [
+      { key: "role", type: "text", value: "Defensive incident triage for a small homelab. Use only the supplied evidence. Do not assert compromise from one weak signal." },
+      { key: "environment", type: "group", children: [
+        { key: "assets", type: "json", value: '{"reverse_proxy":"public","media_server":"private","backup_nas":"private"}' },
+        { key: "access", type: "group", children: [
+          { key: "vpn_required_for_admin", type: "boolean", value: "true" },
+          { key: "geo_blocking", type: "boolean", value: "false" },
+        ] },
+        { key: "response_policy", type: "group", children: [
+          { key: "isolate_on_confirmed_active_compromise", type: "boolean", value: "true" },
+          { key: "preserve_logs_before_reset", type: "boolean", value: "true" },
+          { key: "allow_monitoring_when_uncertain", type: "boolean", value: "true" },
+        ] },
+      ] },
+      { key: "evidence_rules", type: "group", children: [
+        { key: "high_confidence_requires", type: "text", value: "Independent corroboration or direct evidence of successful unauthorized access" },
+        { key: "benign_explanation_must_be_considered", type: "boolean", value: "true" },
+      ] },
+    ],
+    state: JSON.stringify({ time_window: "Last 30 minutes", reverse_proxy: { failed_logins: 96, successful_logins: 1, successful_login_source: "usual VPN address", unusual_paths: ["/admin", "/wp-login.php"] }, host: { cpu_percent: 42, new_processes: [], outbound_destinations: ["configured backup target"], file_integrity_alerts: 0 }, notes: "The failed logins came from rotating public IPs. The only success used a known account through the expected VPN address. No change was found on the private NAS." }, null, 2),
+    questions: [
+      { type: "choice", name: "incident_classification", instructions: "What is the best current classification?", context: "Separate attempted access from successful compromise; allow uncertainty.", criteria: [["routine_noise", "Expected background scanning with no targeted pattern"], ["attempted_intrusion", "Suspicious access attempts without evidence of success"], ["likely_compromise", "Independent evidence points to unauthorized access"], ["insufficient_evidence", "Available evidence cannot distinguish these states"]] },
+      { type: "score", name: "response_priority", instructions: "Rate response priority using the supplied asset exposure and evidence.", criteria: ["Monitor", "Investigate today", "Urgent investigation", "Immediate containment"] },
+      { type: "noul", name: "isolate_reverse_proxy_now", instructions: "Should the reverse proxy be isolated immediately?", context: "Apply the response policy and consider service disruption and preservation of logs.", criteria: ["Evidence justifies immediate isolation", "Continue investigation or monitoring without immediate isolation"] },
+    ],
+  },
+  devsecops: {
+    format: "json",
+    contextFacts: [
+      { key: "role", type: "text", value: "Defensive release review. Decide whether a small team can ship a web service update." },
+      { key: "release_policy", type: "group", children: [
+        { key: "hard_blocks", type: "group", children: [
+          { key: "exploited_vulnerability_in_runtime", type: "boolean", value: "true" },
+          { key: "unsigned_production_artifact", type: "boolean", value: "true" },
+          { key: "failing_authz_regression", type: "boolean", value: "true" },
+        ] },
+        { key: "conditional_release", type: "group", children: [
+          { key: "medium_finding_requires_owner_and_deadline", type: "boolean", value: "true" },
+          { key: "staged_rollout_required_when_dependency_change_is_large", type: "boolean", value: "true" },
+        ] },
+        { key: "review_order", type: "json", value: '["hard blocks", "test evidence", "mitigations", "rollout readiness"]' },
+      ] },
+      { key: "deployment", type: "group", children: [
+        { key: "audience", type: "text", value: "public internet" },
+        { key: "data", type: "text", value: "user profiles; no payment data" },
+        { key: "rollback_minutes", type: "number", value: "10" },
+      ] },
+    ],
+    state: JSON.stringify({ change: "Upgrade the API framework and rebuild the container image", artifact: { signed: true, provenance_attested: true, sbom_generated: true }, scans: { critical: 0, high: 0, medium: 2, exploited_runtime_vulnerability: false }, tests: { unit: "pass", integration: "pass", authorization_regression: "pass", dynamic_scan: "pass" }, exceptions: [{ finding: "Medium severity transitive dependency", owner: "platform team", deadline_days: 14, compensating_control: "affected feature disabled" }], rollout: { staged_percent: 10, monitoring_minutes: 60, rollback_drill_completed: true }, uncertainty: "The second medium finding has no assigned owner or due date." }, null, 2),
+    questions: [
+      { type: "choice", name: "release_decision", instructions: "Choose the release disposition under the stated policy.", context: "Check hard blocks first, then conditional requirements. Treat missing ownership as meaningful.", criteria: [["approve", "Ship normally now"], ["approve_with_conditions", "Ship only after explicit conditions are met"], ["hold", "Do not ship until gaps are fixed"], ["escalate", "Policy is insufficient and an authorized exception is required"]] },
+      { type: "score", name: "residual_risk", instructions: "Rate residual release risk after current controls, not the unmitigated scanner severity.", criteria: ["Very low", "Low", "Moderate", "High", "Critical"] },
+      { type: "noul", name: "policy_ready", instructions: "Does the release currently satisfy every stated mandatory and conditional policy requirement?", criteria: ["All requirements are met", "At least one requirement remains unmet"] },
+    ],
+  },
 };
 
 const challengeNotes = {
