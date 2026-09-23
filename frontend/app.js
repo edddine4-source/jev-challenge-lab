@@ -225,6 +225,19 @@ const challengeExamples = {
   },
 };
 
+const challengeNotes = {
+  tone: "A quick language test: identify the tone of a colleague’s message and whether it contains a request. Use only the wording shown.",
+  astronomy: "Assess a repeating brightness dip and distinguish a possible planet transit from stellar variation or instrument error. Judge how much one observation can prove.",
+  support: "Route a payment-support request, rate its urgency, and identify frustration by applying the shared service rules as well as the customer’s message.",
+  purchase: "Decide whether a used mini PC fits a 24/7 homelab and a €300 budget. Keep suitability separate from value for money.",
+  news: "Classify an AI model announcement for a reader interested in local, open-source AI, while treating benchmark claims as something to verify.",
+  release: "Review a software release using nested product, quality, and operations context. Apply hard blockers before considering a staged rollout.",
+  research: "Evaluate whether deep-water warming is real or sensor drift. Compare independent measurements and quality rules before supporting a published claim.",
+  space: "Choose an action for an autonomous lunar lander with uncertain radar data. Apply hard safety constraints before science value.",
+  incident: "Triage suspicious homelab login activity without assuming a breach. Distinguish attempted access from confirmed compromise and select a proportionate response.",
+  devsecops: "Review a public web-service release gate using security findings, ownership, evidence, and rollout controls before deciding whether to ship.",
+};
+
 function contextValueField(type, value = "") {
   if (type === "group") {
     const children = Array.isArray(value) ? value : [];
@@ -300,6 +313,7 @@ function editorDraftSnapshot() {
   return {
     model: $("#jevModel").value,
     format: $("#stateFormat").value,
+    memo: $("#challengeMemo").value,
     state: $("#challengeState").value,
     contextFacts: [...$("#contextFacts").children].map(contextRowSnapshot),
     questions,
@@ -316,6 +330,7 @@ function restoreEditorDraft(draft, id) {
   questionSequence = 0;
   $("#jevModel").value = draft.model || "jev-latest";
   $("#stateFormat").value = draft.format === "json" ? "json" : "text";
+  $("#challengeMemo").value = typeof draft.memo === "string" ? draft.memo : "";
   $("#challengeState").value = typeof draft.state === "string" ? draft.state : "";
   $("#contextFacts").innerHTML = (Array.isArray(draft.contextFacts) ? draft.contextFacts : []).map(contextFactRow).join("");
   $("#questionList").innerHTML = (Array.isArray(draft.questions) ? draft.questions : []).map(questionCard).join("");
@@ -437,6 +452,7 @@ function importChallengePayload(payload) {
     const contextFacts = contextFactsFromObject(payload);
     if (!contextFacts.length) throw new Error("The shared context object is empty");
     $("#contextFacts").innerHTML = contextFacts.map(contextFactRow).join("");
+    $("#challengeMemo").value = "";
     updateRequestPreview();
     return "context";
   }
@@ -451,6 +467,7 @@ function importChallengePayload(payload) {
     const format = typeof content === "string" ? "text" : "json";
     if (format === "json" && (content === null || typeof content !== "object")) throw new Error("state must be text, an object, or a list");
     if (typeof payload.model === "string" && payload.model.trim()) $("#jevModel").value = payload.model;
+    $("#challengeMemo").value = typeof payload.memo === "string" ? payload.memo : "";
     $("#stateFormat").value = format;
     $("#contextFacts").innerHTML = contextFacts.map(contextFactRow).join("");
     $("#challengeState").value = format === "text" ? content : JSON.stringify(content, null, 2);
@@ -477,6 +494,7 @@ function importChallengePayload(payload) {
   }
 
   $("#jevModel").value = typeof payload.model === "string" && payload.model.trim() ? payload.model : "jev-latest";
+  $("#challengeMemo").value = typeof payload.memo === "string" ? payload.memo : "";
   $("#stateFormat").value = format;
   $("#contextFacts").innerHTML = contextFacts.map(contextFactRow).join("");
   $("#challengeState").value = format === "text" ? content : JSON.stringify(content, null, 2);
@@ -607,6 +625,7 @@ function loadChallengeExample(name) {
     button.setAttribute("aria-pressed", String(selected));
   });
   $("#stateFormat").value = example.format;
+  $("#challengeMemo").value = challengeNotes[name] || "";
   $("#contextFacts").innerHTML = (example.contextFacts || []).map(contextFactRow).join("");
   $("#challengeState").value = example.state;
   $("#questionList").innerHTML = example.questions.map(questionCard).join("");
@@ -623,6 +642,7 @@ function clearChallenge() {
   });
   $("#jevModel").value = "jev-latest";
   $("#stateFormat").value = "text";
+  $("#challengeMemo").value = "";
   $("#contextFacts").innerHTML = "";
   $("#challengeState").value = "";
   $("#questionList").innerHTML = "";
@@ -687,6 +707,7 @@ function historyCard(item) {
   return `<article class="history-card" data-saved-kind="history" data-saved-id="${item.id}" data-saved-title="${escapeHtml(item.title)}">
     <div class="history-card-main">
       <h3>${escapeHtml(item.title)}</h3>
+      ${item.memo ? `<p class="saved-memo">${escapeHtml(item.memo)}</p>` : ""}
       <div class="history-meta"><span>${escapeHtml(formatHistoryDate(item.created_at))}</span><span>${escapeHtml(item.model)}</span><span>${item.question_count} decision${item.question_count === 1 ? "" : "s"}</span></div>
     </div>
     <div class="history-card-actions">
@@ -702,6 +723,7 @@ function draftCard(item) {
     <div class="history-card-main">
       <span class="draft-status ${item.is_complete ? "complete" : "incomplete"}">${item.is_complete ? "Complete request" : "Incomplete draft"}</span>
       <h3>${escapeHtml(item.title)}</h3>
+      ${item.memo ? `<p class="saved-memo">${escapeHtml(item.memo)}</p>` : ""}
       <div class="history-meta"><span>Updated ${escapeHtml(formatHistoryDate(item.updated_at))}</span></div>
     </div>
     <div class="history-card-actions">
@@ -746,6 +768,7 @@ function setHistoryDrawer(open) {
 async function openSavedChallenge(id) {
   const saved = await api(`/api/history/${id}`);
   importChallengePayload(saved.request);
+  $("#challengeMemo").value = typeof saved.memo === "string" ? saved.memo : "";
   setActiveDraft(null);
   renderChallengeResult(saved);
   $$('[data-example]').forEach((button) => {
@@ -895,7 +918,9 @@ $("#challengeForm").addEventListener("submit", async (event) => {
     button.disabled = true;
     button.querySelector("span").textContent = "Jev is deciding…";
     $("#challengeResults").innerHTML = '<div class="results-placeholder"><span class="result-orb thinking">J</span><h2>Evaluating every decision</h2><p>All questions share the same situation and are submitted together.</p></div>';
-    const result = await api("/api/jev/challenge", { method: "POST", body: JSON.stringify(payload) });
+    const result = await api("/api/jev/challenge", {
+      method: "POST", body: JSON.stringify({ ...payload, memo: $("#challengeMemo").value.trim() })
+    });
     renderChallengeResult(result);
     loadHistory(false);
   } catch (error) {

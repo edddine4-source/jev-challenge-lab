@@ -93,9 +93,12 @@ def initialize_history() -> None:
                 question_count INTEGER NOT NULL,
                 request_json TEXT NOT NULL,
                 response_json TEXT NOT NULL,
-                interpretation_json TEXT NOT NULL
+                interpretation_json TEXT NOT NULL,
+                memo TEXT NOT NULL DEFAULT ''
             )
         """)
+        if "memo" not in {row["name"] for row in connection.execute("PRAGMA table_info(challenge_history)")}:
+            connection.execute("ALTER TABLE challenge_history ADD COLUMN memo TEXT NOT NULL DEFAULT ''")
         connection.execute("CREATE INDEX IF NOT EXISTS idx_challenge_history_created_at ON challenge_history(created_at DESC)")
         connection.execute("""
             CREATE TABLE IF NOT EXISTS challenge_drafts (
@@ -123,14 +126,14 @@ def challenge_title(request_json: dict[str, Any]) -> str:
     return title[:77] + "..." if len(title) > 80 else title
 
 
-def store_challenge_history(request_json: dict[str, Any], response_json: dict[str, Any], interpretation: list[dict[str, Any]]) -> tuple[int, str]:
+def store_challenge_history(request_json: dict[str, Any], response_json: dict[str, Any], interpretation: list[dict[str, Any]], memo: str = "") -> tuple[int, str]:
     title = challenge_title(request_json)
     created_at = datetime.now(timezone.utc).isoformat()
     with history_connection() as connection:
         cursor = connection.execute(
             """INSERT INTO challenge_history
-               (title, created_at, model, question_count, request_json, response_json, interpretation_json)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+               (title, created_at, model, question_count, request_json, response_json, interpretation_json, memo)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 title,
                 created_at,
@@ -139,6 +142,7 @@ def store_challenge_history(request_json: dict[str, Any], response_json: dict[st
                 json.dumps(request_json, ensure_ascii=False),
                 json.dumps(response_json, ensure_ascii=False),
                 json.dumps(interpretation, ensure_ascii=False),
+                memo,
             ),
         )
     return int(cursor.lastrowid), title
@@ -152,6 +156,7 @@ class JevChallengeRequest(BaseModel):
     state: Any
     model: str = Field(default="jev-latest", min_length=1, max_length=80)
     questions: dict[str, dict[str, Any]] = Field(min_length=1, max_length=50)
+    memo: str = Field(default="", max_length=5000)
 
 
 class ApiKeySettings(BaseModel):
@@ -348,12 +353,12 @@ def list_history(limit: int = 0) -> dict[str, Any]:
         if limit > 0:
             safe_limit = min(limit, 5000)
             rows = connection.execute(
-                "SELECT id, title, created_at, model, question_count FROM challenge_history ORDER BY id DESC LIMIT ?",
+                "SELECT id, title, created_at, model, question_count, memo FROM challenge_history ORDER BY id DESC LIMIT ?",
                 (safe_limit,),
             ).fetchall()
         else:
             rows = connection.execute(
-                "SELECT id, title, created_at, model, question_count FROM challenge_history ORDER BY id DESC"
+                "SELECT id, title, created_at, model, question_count, memo FROM challenge_history ORDER BY id DESC"
             ).fetchall()
         total = connection.execute("SELECT COUNT(*) FROM challenge_history").fetchone()[0]
     return {"items": [dict(row) for row in rows], "total": total}
@@ -371,6 +376,7 @@ def history_detail(history_id: int) -> dict[str, Any]:
         "created_at": row["created_at"],
         "model": row["model"],
         "question_count": row["question_count"],
+        "memo": row["memo"],
         "request": json.loads(row["request_json"]),
         "response": json.loads(row["response_json"]),
         "interpretation": json.loads(row["interpretation_json"]),
@@ -402,11 +408,14 @@ def delete_history(history_id: int) -> dict[str, Any]:
 def list_drafts() -> dict[str, Any]:
     with history_connection() as connection:
         rows = connection.execute(
-            "SELECT id, title, created_at, updated_at, is_complete FROM challenge_drafts ORDER BY updated_at DESC, id DESC"
+            "SELECT id, title, created_at, updated_at, is_complete, draft_json FROM challenge_drafts ORDER BY updated_at DESC, id DESC"
         ).fetchall()
     items = [dict(row) for row in rows]
     for item in items:
         item["is_complete"] = bool(item["is_complete"])
+        draft = json.loads(item.pop("draft_json"))
+        widget = draft.get("_widget")
+        item["memo"] = str(draft.get("memo") or (widget.get("memo") if isinstance(widget, dict) else "") or "")
     return {"items": items, "total": len(items)}
 
 
@@ -494,8 +503,8 @@ async def jev_challenge(payload: JevChallengeRequest) -> dict[str, Any]:
     except (httpx.HTTPError, ValueError) as exc:
         raise HTTPException(status_code=502, detail="Could not get a valid answer from Jev.") from exc
     interpretation = explain_jev_answers(data)
-    history_id, title = store_challenge_history(request_json, data, interpretation)
-    return {"request": request_json, "response": data, "interpretation": interpretation, "history_id": history_id, "history_title": title}
+    history_id, title = store_challenge_history(request_json, data, interpretation, payload.memo.strip())
+    return {"request": request_json, "response": data, "interpretation": interpretation, "history_id": history_id, "history_title": title, "memo": payload.memo.strip()}
 
 
 app.mount("/assets", StaticFiles(directory=FRONTEND), name="assets")

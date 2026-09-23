@@ -47,6 +47,7 @@ Jev is strongest when a decision is clearly described: the available options, th
 - **Three decision formats** — `choice` for selecting among options, `score` for evaluating a scale, and `noul` for a yes/no probability.
 - **Readable results** — translate the typed response into plain language while preserving the original response JSON.
 - **Saved work** — keep complete requests, incomplete drafts, and successful executions in a local SQLite database.
+- **Challenge notes** — keep a private explanation of what each challenge is meant to test. Notes stay with drafts and history, but are never sent to Jev.
 - **Local credential storage** — name and save multiple API keys, then choose which one Jev uses. Keys stay on the machine running the app; only masked placeholders are sent to the browser.
 - **Responsive layout** — results appear below the editor on narrow screens and in their own scrollable panel beside it on larger screens.
 

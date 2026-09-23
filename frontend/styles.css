@@ -121,6 +121,7 @@ h1, h2, h3, p { margin-top: 0; }
 .history-card-main { display: grid; gap: 9px; padding: 16px; }
 .history-card-main h3 { margin: 0; font-size: .96rem; line-height: 1.35; }
 .history-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; color: var(--muted); font: .62rem/1.25 var(--mono); text-transform: uppercase; }
+.saved-memo { margin: 0; color: var(--muted); font-size: .72rem; line-height: 1.4; }
 .history-card-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid var(--line); }
 .history-card-actions button { min-height: 38px; border: 0; border-right: 1px solid var(--line); background: #f3f4ef; color: var(--ink); font: 700 .61rem/1 var(--mono); text-transform: uppercase; }
 .history-card-actions button:last-child { border-right: 0; }
@@ -247,6 +248,9 @@ h1 span:last-child { margin-left: clamp(28px, 7vw, 110px); }
 .nested-context .nested-context { margin-left: 12px; }
 .add-context-child { justify-self: start; border: 0; padding: 5px 2px; background: transparent; color: #3e5b10; font: 700 .66rem/1 var(--mono); text-transform: uppercase; }
 .large-input { width: 100%; min-height: 160px; resize: vertical; margin-top: 13px; border: 1px solid var(--line); border-radius: 0; padding: 14px; background: white; color: var(--ink); line-height: 1.55; outline: none; }
+.challenge-note-card { background: #f6faed; }
+.challenge-memo { width: 100%; min-height: 106px; resize: vertical; margin-top: 13px; border: 1px solid var(--line); border-radius: 0; padding: 14px; background: white; color: var(--ink); line-height: 1.5; outline: none; }
+.challenge-memo:focus { border-color: var(--ink); box-shadow: 3px 3px 0 var(--lime); }
 .large-input:focus, .compact-field input:focus, .compact-field select:focus, .question-fields input:focus, .noul-definitions input:focus, .criterion-row input:focus, .context-field textarea:focus, .question-context textarea:focus { border-color: var(--ink); box-shadow: 3px 3px 0 var(--lime); }
 .input-hint { margin: 9px 0 0; color: var(--muted); font-size: .73rem; }
 
