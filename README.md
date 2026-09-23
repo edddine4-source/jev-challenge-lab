@@ -6,6 +6,27 @@ Jev Challenge Lab gives you a friendly visual editor for the [TypeSafe Jev](http
 
 Your API key stays on your server. Your drafts and challenge history stay in your local SQLite database.
 
+## Omarchy plugin
+
+On Omarchy Quattro, the lab is also a native bar plugin. Its **Jev** button starts the bundled local service only when needed, then opens the complete lab in your default browser. The full browser workspace keeps the visual editor, direct JSON mode, drafts, history, and wide result view intact.
+
+Install it from this repository after it has been added to the Omarchy Marketplace:
+
+```bash
+omarchy plugin add https://github.com/edddine4-source/jev-challenge-lab.git --enable
+```
+
+The first click creates a private Python virtual environment in `~/.local/share/jev-challenge-lab/` and downloads the packages listed in `requirements.txt`. This requires Python 3 and internet access once. The launcher uses `bash`, `curl`, `xdg-open`, and desktop notifications supplied by Omarchy; it opens the lab at `http://127.0.0.1:8766/`. The app's API key, drafts, history, and service log are kept in `~/.local/state/jev-challenge-lab/`, outside the plugin folder. No administrator privileges are used.
+
+To remove it, use:
+
+```bash
+omarchy plugin remove io.github.edddine4-source.jev-challenge-lab
+rm -rf ~/.local/share/jev-challenge-lab ~/.local/state/jev-challenge-lab
+```
+
+The final `rm` command is optional; it removes your local API key, saved drafts, and challenge history.
+
 ## Why use it?
 
 Jev is strongest when a decision is clearly described: the available options, the context that matters, and the kind of answer you need. This app makes that process easier to explore and repeat.

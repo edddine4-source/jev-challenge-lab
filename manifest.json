@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.edddine4-source.jev-challenge-lab",
+  "name": "Jev Challenge Lab",
+  "version": "1.0.0",
+  "author": "edddine4-source",
+  "license": "MIT",
+  "description": "Open a private local workspace for testing structured TypeSafe Jev challenges.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {"barWidget": "BarWidget.qml"},
+  "barWidget": {
+    "displayName": "Jev Challenge Lab",
+    "category": "Development",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
