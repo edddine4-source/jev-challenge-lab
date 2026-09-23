@@ -8,15 +8,15 @@ Your API key stays on your server. Your drafts and challenge history stay in you
 
 ## Omarchy plugin
 
-On Omarchy Quattro, the lab is also a native bar plugin. Its **Jev** button starts the bundled local service only when needed, then opens the complete lab in your default browser. The full browser workspace keeps the visual editor, direct JSON mode, drafts, history, and wide result view intact.
+On Omarchy Quattro, the lab is also a native bar plugin. Click **Jev** to open its panel directly in the shell. Choose **Fill menus** or **Paste ready JSON**; imported JSON and examples fill the menus for review. Use **+ Context** to add text, numbers, yes/no values, lists, or nested groups, with vertical guides showing their relationships. Structured situations also open as editable fields. For example, add an `environment` group and a `criticality` field to send `context.environment.criticality` to Jev. Raw JSON remains available under **Advanced JSON**. Large request and response JSON have their own scrollable viewers. Answers appear as plain-language cards with probability bars. A separate **Challenge note** explains the purpose of the challenge for your own reference; it stays with drafts and execution history but is never sent to Jev. All built-in examples include a note. The panel also includes examples (including defensive cybersecurity and DevSecOps reviews), a request preview, drafts, execution history, and API-key settings. You can remove built-in examples from the widget and restore them later. In **API keys**, name and save multiple keys, choose the active one, or delete one; saved values are always masked.
 
-Install it from this repository after it has been added to the Omarchy Marketplace:
+Install it directly from this repository on Omarchy Quattro:
 
 ```bash
 omarchy plugin add https://github.com/edddine4-source/jev-challenge-lab.git --enable
 ```
 
-The first click creates a private Python virtual environment in `~/.local/share/jev-challenge-lab/` and downloads the packages listed in `requirements.txt`. This requires Python 3 and internet access once. The launcher uses `bash`, `curl`, `xdg-open`, and desktop notifications supplied by Omarchy; it opens the lab at `http://127.0.0.1:8766/`. The app's API key, drafts, history, and service log are kept in `~/.local/state/jev-challenge-lab/`, outside the plugin folder. No administrator privileges are used.
+The first click creates a private Python virtual environment in `~/.local/share/jev-challenge-lab/` and downloads the packages listed in `requirements.txt`. This requires Python 3 and internet access once. The launcher uses `bash`, `curl`, and desktop notifications supplied by Omarchy; it starts a local service on `127.0.0.1:8766` for the widget to call. The app's API key, drafts, history, and service log are kept in `~/.local/state/jev-challenge-lab/`, outside the plugin folder. No administrator privileges are used.
 
 To remove it, use:
 
@@ -157,6 +157,9 @@ backend/        FastAPI application and Jev API proxy
 frontend/       Single-page interface, styling, and editor behavior
 data/           Local API-key settings, history, and drafts (ignored by Git)
 BarWidget.qml   Omarchy Quattro bar entry point
+LabPanel.qml    Native Omarchy challenge editor and saved-work panel
+LabModel.js     Shared request and draft conversion for the widget
+LabExamples.js  Native examples generated from the browser examples
 manifest.json   Omarchy plugin metadata
 bin/            Local-service launcher used by the Omarchy plugin
 compose.yaml    Docker Compose configuration

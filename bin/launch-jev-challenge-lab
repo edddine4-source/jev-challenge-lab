@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Start Jev Challenge Lab as a user service and open it in the default browser.
+# Start Jev Challenge Lab as a user service. Open the browser unless
+# --service-only is requested by the Omarchy panel.
 # The plugin sources stay read-only; state and the optional virtual environment
 # live in the user's XDG data/state directories.
 set -euo pipefail
@@ -9,7 +10,7 @@ data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/jev-challenge-lab"
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/jev-challenge-lab"
 venv_dir="$data_dir/venv"
 log_file="$state_dir/service.log"
-url="http://127.0.0.1:8766/"
+url="http://127.0.0.1:8766"
 
 mkdir -p "$data_dir" "$state_dir"
 chmod 700 "$data_dir" "$state_dir"
@@ -57,4 +58,6 @@ if ! is_our_service_running; then
   fi
 fi
 
-xdg-open "$url" >/dev/null 2>&1 &
+if [ "${1:-}" != "--service-only" ]; then
+  xdg-open "$url/" >/dev/null 2>&1 &
+fi

@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "author": "edddine4-source",
   "license": "MIT",
-  "description": "Open a private local workspace for testing structured TypeSafe Jev challenges.",
+  "description": "Build, run, and save structured TypeSafe Jev challenges inside an Omarchy bar panel.",
   "kinds": ["bar-widget"],
   "entryPoints": {"barWidget": "BarWidget.qml"},
   "barWidget": {

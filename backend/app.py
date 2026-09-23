@@ -20,6 +20,7 @@ FRONTEND = ROOT / "frontend"
 load_dotenv(ROOT / ".env")
 JEV_URL = "https://api.typesafe.ai/v1/systemone"
 SETTINGS_FILE = Path(os.getenv("JEV_SETTINGS_FILE", ROOT / "data" / "settings.json"))
+EXAMPLES_FILE = SETTINGS_FILE.with_name("hidden_examples.json")
 HISTORY_DB = Path(os.getenv("JEV_HISTORY_DB", ROOT / "data" / "history.db"))
 
 
@@ -73,6 +74,22 @@ def public_api_keys() -> dict[str, Any]:
         "active_id": app.state.active_api_key_id,
         "jev_connected": bool(active_api_key()),
     }
+
+
+def hidden_examples() -> list[str]:
+    try:
+        data = json.loads(EXAMPLES_FILE.read_text(encoding="utf-8"))
+        return [name for name in data if isinstance(name, str)] if isinstance(data, list) else []
+    except (FileNotFoundError, OSError, ValueError, TypeError):
+        return []
+
+
+def save_hidden_examples(names: list[str]) -> None:
+    EXAMPLES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = EXAMPLES_FILE.with_suffix(".tmp")
+    temporary.write_text(json.dumps(names), encoding="utf-8")
+    temporary.chmod(0o600)
+    temporary.replace(EXAMPLES_FILE)
 
 
 def history_connection() -> sqlite3.Connection:
@@ -345,6 +362,28 @@ def delete_api_key(key_id: str) -> dict[str, Any]:
     app.state.api_keys = keys
     app.state.active_api_key_id = active_id
     return public_api_keys()
+
+
+@app.get("/api/settings/examples")
+def list_hidden_examples() -> dict[str, Any]:
+    return {"hidden": hidden_examples()}
+
+
+@app.delete("/api/settings/examples/{name}")
+def hide_example(name: str) -> dict[str, Any]:
+    if not name.isascii() or not name.replace("_", "").isalnum() or len(name) > 80:
+        raise HTTPException(status_code=422, detail="Invalid example name.")
+    names = hidden_examples()
+    if name not in names:
+        names.append(name)
+    save_hidden_examples(names)
+    return {"hidden": names}
+
+
+@app.delete("/api/settings/examples")
+def restore_examples() -> dict[str, Any]:
+    save_hidden_examples([])
+    return {"hidden": []}
 
 
 @app.get("/api/history")
