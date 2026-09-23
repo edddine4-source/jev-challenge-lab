@@ -32,10 +32,13 @@
             <button type="button" class="api-key-toggle" id="apiKeyToggle" aria-expanded="false" aria-controls="apiKeyPanel">API key</button>
           </div>
           <form class="api-key-panel" id="apiKeyPanel" hidden>
-            <div class="api-key-heading"><div><b>Use your TypeSafe API key</b><span>Saved privately on this server for next time.</span></div><button type="button" id="closeApiKey" aria-label="Close API key settings">×</button></div>
+            <div class="api-key-heading"><div><b>Manage TypeSafe API keys</b><span>Name, save, and choose which key Jev uses. Values stay hidden.</span></div><button type="button" id="closeApiKey" aria-label="Close API key settings">×</button></div>
+            <div id="apiKeyList" class="api-key-list" aria-live="polite"></div>
+            <label for="apiKeyName">Key name</label>
+            <input id="apiKeyName" name="name" type="text" maxlength="80" placeholder="Homelab" required />
             <label for="apiKeyInput">API key</label>
             <input id="apiKeyInput" name="api_key" type="password" autocomplete="new-password" placeholder="apikey_••••••••••••••••" required minlength="16" />
-            <div class="api-key-actions"><small id="apiKeyMessage">The saved key is never shown in the browser.</small><button type="submit" id="saveApiKey">Save key</button></div>
+            <div class="api-key-actions"><small id="apiKeyMessage">Saved values are always masked.</small><button type="submit" id="saveApiKey">Save and use</button></div>
           </form>
         </div>
       </div>

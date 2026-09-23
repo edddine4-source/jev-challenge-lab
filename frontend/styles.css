@@ -81,7 +81,16 @@ h1, h2, h3, p { margin-top: 0; }
 .api-key-heading span { color: var(--muted-dark); font-size: .69rem; line-height: 1.35; }
 .api-key-heading button { border: 0; padding: 0; background: transparent; color: var(--muted-dark); font-size: 1.1rem; line-height: 1; }
 .api-key-panel label { display: block; margin-bottom: 6px; color: var(--muted-dark); font: 700 .6rem/1 var(--mono); text-transform: uppercase; }
+.api-key-panel label:not(:first-of-type) { margin-top: 12px; }
 .api-key-panel input { width: 100%; border: 1px solid var(--line-dark); border-radius: 0; padding: 11px 12px; background: #050605; color: var(--lime); outline: none; font: .75rem/1 var(--mono); }
+.api-key-list { display: grid; gap: 7px; max-height: 210px; overflow-y: auto; margin-bottom: 14px; }
+.api-key-profile { display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--line-dark); }
+.api-key-profile.active { border-color: var(--lime); }
+.api-key-profile-copy { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.api-key-profile-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .72rem; }
+.api-key-profile-copy small { color: var(--muted-dark); font: .64rem/1 var(--mono); }
+.api-key-profile button { border: 1px solid var(--line-dark); padding: 6px; color: var(--lime); background: transparent; font: 700 .6rem/1 var(--mono); cursor: pointer; }
+.api-key-profile button:hover { border-color: var(--lime); }
 .api-key-panel input:focus { border-color: var(--lime); }
 .api-key-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 11px; }
 .api-key-actions small { color: var(--muted-dark); font-size: .62rem; line-height: 1.3; }

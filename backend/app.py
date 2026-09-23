@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import json
 import sqlite3
+from uuid import uuid4
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,20 +23,56 @@ SETTINGS_FILE = Path(os.getenv("JEV_SETTINGS_FILE", ROOT / "data" / "settings.js
 HISTORY_DB = Path(os.getenv("JEV_HISTORY_DB", ROOT / "data" / "history.db"))
 
 
-def load_saved_api_key() -> str:
+def load_api_key_settings() -> tuple[list[dict[str, str]], str | None]:
     try:
         settings = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
-        return str(settings.get("typesafe_api_key", "")).strip()
     except (FileNotFoundError, OSError, ValueError, TypeError):
-        return ""
+        return [], None
+    if not isinstance(settings, dict):
+        return [], None
+    profiles = settings.get("api_keys")
+    if isinstance(profiles, list):
+        keys = [
+            {"id": item["id"], "name": item["name"], "api_key": item["api_key"]}
+            for item in profiles
+            if isinstance(item, dict)
+            and all(isinstance(item.get(field), str) and item[field] for field in ("id", "name", "api_key"))
+        ]
+        active_id = settings.get("active_api_key_id")
+        if active_id not in {item["id"] for item in keys}:
+            active_id = keys[0]["id"] if keys else None
+        return keys, active_id
+    legacy_key = settings.get("typesafe_api_key")
+    if isinstance(legacy_key, str) and legacy_key.strip():
+        return [{"id": "legacy", "name": "Original key", "api_key": legacy_key.strip()}], "legacy"
+    return [], None
 
 
-def save_api_key(api_key: str) -> None:
+def save_api_key_settings(keys: list[dict[str, str]], active_id: str | None) -> None:
     SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
     temporary = SETTINGS_FILE.with_suffix(".tmp")
-    temporary.write_text(json.dumps({"typesafe_api_key": api_key}), encoding="utf-8")
+    temporary.write_text(json.dumps({"api_keys": keys, "active_api_key_id": active_id}), encoding="utf-8")
     temporary.chmod(0o600)
     temporary.replace(SETTINGS_FILE)
+
+
+def active_api_key() -> str:
+    active_id = app.state.active_api_key_id
+    for profile in app.state.api_keys:
+        if profile["id"] == active_id:
+            return profile["api_key"]
+    return os.getenv("TYPESAFE_API_KEY", "").strip()
+
+
+def public_api_keys() -> dict[str, Any]:
+    return {
+        "keys": [
+            {"id": item["id"], "name": item["name"], "masked_key": "••••••••", "active": item["id"] == app.state.active_api_key_id}
+            for item in app.state.api_keys
+        ],
+        "active_id": app.state.active_api_key_id,
+        "jev_connected": bool(active_api_key()),
+    }
 
 
 def history_connection() -> sqlite3.Connection:
@@ -107,7 +144,7 @@ def store_challenge_history(request_json: dict[str, Any], response_json: dict[st
     return int(cursor.lastrowid), title
 
 app = FastAPI(title="Jev Challenge Lab", version="2.0.0")
-app.state.jev_api_key = load_saved_api_key() or os.getenv("TYPESAFE_API_KEY", "").strip()
+app.state.api_keys, app.state.active_api_key_id = load_api_key_settings()
 initialize_history()
 
 
@@ -118,7 +155,12 @@ class JevChallengeRequest(BaseModel):
 
 
 class ApiKeySettings(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
     api_key: str = Field(min_length=16, max_length=512)
+
+
+class ApiKeyRename(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
 
 
 class HistoryRename(BaseModel):
@@ -223,20 +265,81 @@ def explain_jev_answers(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 @app.get("/api/health")
 def health() -> dict[str, Any]:
-    return {"status": "ok", "jev_connected": bool(app.state.jev_api_key)}
+    return {"status": "ok", "jev_connected": bool(active_api_key())}
 
 
-@app.post("/api/settings/api-key")
-def update_api_key(settings: ApiKeySettings) -> dict[str, Any]:
+@app.get("/api/settings/api-keys")
+def list_api_keys() -> dict[str, Any]:
+    return public_api_keys()
+
+
+@app.get("/api/settings/api-key")
+def retired_key_reveal() -> None:
+    raise HTTPException(status_code=410, detail="API keys cannot be revealed.")
+
+
+@app.post("/api/settings/api-keys")
+def add_api_key(settings: ApiKeySettings) -> dict[str, Any]:
     api_key = settings.api_key.strip()
+    name = settings.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Give this API key a name.")
     if len(api_key) < 16 or any(character.isspace() for character in api_key):
         raise HTTPException(status_code=422, detail="Enter a valid TypeSafe API key without spaces.")
+    profile = {"id": uuid4().hex, "name": name, "api_key": api_key}
+    keys = app.state.api_keys + [profile]
     try:
-        save_api_key(api_key)
+        save_api_key_settings(keys, profile["id"])
     except OSError as exc:
         raise HTTPException(status_code=500, detail="The API key could not be saved on this server.") from exc
-    app.state.jev_api_key = api_key
-    return {"saved": True, "jev_connected": True}
+    app.state.api_keys = keys
+    app.state.active_api_key_id = profile["id"]
+    return public_api_keys()
+
+
+@app.put("/api/settings/api-keys/{key_id}/activate")
+def activate_api_key(key_id: str) -> dict[str, Any]:
+    if key_id not in {item["id"] for item in app.state.api_keys}:
+        raise HTTPException(status_code=404, detail="API key not found.")
+    try:
+        save_api_key_settings(app.state.api_keys, key_id)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="The active API key could not be saved.") from exc
+    app.state.active_api_key_id = key_id
+    return public_api_keys()
+
+
+@app.patch("/api/settings/api-keys/{key_id}")
+def rename_api_key(key_id: str, settings: ApiKeyRename) -> dict[str, Any]:
+    name = settings.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Give this API key a name.")
+    if key_id not in {item["id"] for item in app.state.api_keys}:
+        raise HTTPException(status_code=404, detail="API key not found.")
+    keys = [{**item, "name": name} if item["id"] == key_id else item for item in app.state.api_keys]
+    try:
+        save_api_key_settings(keys, app.state.active_api_key_id)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="The API key name could not be saved.") from exc
+    app.state.api_keys = keys
+    return public_api_keys()
+
+
+@app.delete("/api/settings/api-keys/{key_id}")
+def delete_api_key(key_id: str) -> dict[str, Any]:
+    keys = [item for item in app.state.api_keys if item["id"] != key_id]
+    if len(keys) == len(app.state.api_keys):
+        raise HTTPException(status_code=404, detail="API key not found.")
+    active_id = app.state.active_api_key_id
+    if active_id == key_id:
+        active_id = keys[0]["id"] if keys else None
+    try:
+        save_api_key_settings(keys, active_id)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="The saved API key could not be deleted.") from exc
+    app.state.api_keys = keys
+    app.state.active_api_key_id = active_id
+    return public_api_keys()
 
 
 @app.get("/api/history")
@@ -370,7 +473,7 @@ def delete_draft(draft_id: int) -> dict[str, Any]:
 
 @app.post("/api/jev/challenge")
 async def jev_challenge(payload: JevChallengeRequest) -> dict[str, Any]:
-    api_key = app.state.jev_api_key
+    api_key = active_api_key()
     if not api_key:
         raise HTTPException(status_code=503, detail="Add your TypeSafe API key before challenging Jev.")
     request_json = validate_challenge(payload)

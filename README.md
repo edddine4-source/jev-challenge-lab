@@ -47,7 +47,7 @@ Jev is strongest when a decision is clearly described: the available options, th
 - **Three decision formats** — `choice` for selecting among options, `score` for evaluating a scale, and `noul` for a yes/no probability.
 - **Readable results** — translate the typed response into plain language while preserving the original response JSON.
 - **Saved work** — keep complete requests, incomplete drafts, and successful executions in a local SQLite database.
-- **Local credential storage** — add or change the API key in the interface; it is saved only on the machine running the app and is never sent to the browser.
+- **Local credential storage** — name and save multiple API keys, then choose which one Jev uses. Keys stay on the machine running the app; only masked placeholders are sent to the browser.
 - **Responsive layout** — results appear below the editor on narrow screens and in their own scrollable panel beside it on larger screens.
 
 ## Quick start
@@ -85,7 +85,7 @@ Add your key to `.env`:
 TYPESAFE_API_KEY=your_typesafe_jev_api_key
 ```
 
-You can also select **Add key** in the app’s top bar. The app saves that key privately in `data/settings.json`, with permissions restricted to its owner. A key saved in the interface takes priority over the `.env` value.
+You can also select **API keys** in the app’s top bar. Name each key and choose the active one. The app saves keys privately in `data/settings.json`, with permissions restricted to its owner. A selected key takes priority over the `.env` value.
 
 On Windows, activate the virtual environment with `.venv\Scripts\activate`, install with `python -m pip install -r requirements.txt`, then start with `python -m uvicorn backend.app:app --host 127.0.0.1 --port 8765`.
 

@@ -954,7 +954,7 @@ async function showConnectionStatus() {
     $("#connectionDot").classList.toggle("connected", connected);
     $("#connectionTitle").textContent = connected ? "Jev connected" : "API key needed";
     $("#connectionText").textContent = connected ? "Ready for challenges" : "Add TYPESAFE_API_KEY";
-    $("#apiKeyToggle").textContent = connected ? "Change key" : "Add key";
+    $("#apiKeyToggle").textContent = "API keys";
   } catch (_) {
     $("#connectionTitle").textContent = "Service unavailable";
     $("#connectionText").textContent = "Check the server";
@@ -964,29 +964,110 @@ async function showConnectionStatus() {
 function setApiKeyPanel(open) {
   $("#apiKeyPanel").hidden = !open;
   $("#apiKeyToggle").setAttribute("aria-expanded", String(open));
-  if (open) $("#apiKeyInput").focus();
+  if (open) {
+    loadApiKeys();
+    $("#apiKeyName").focus();
+  }
+}
+
+async function loadApiKeys() {
+  const list = $("#apiKeyList");
+  try {
+    const data = await api("/api/settings/api-keys");
+    list.replaceChildren();
+    for (const profile of data.keys) {
+      const row = document.createElement("div");
+      row.className = `api-key-profile${profile.active ? " active" : ""}`;
+      const copy = document.createElement("div");
+      copy.className = "api-key-profile-copy";
+      const title = document.createElement("strong");
+      title.textContent = `${profile.name}${profile.active ? " · ACTIVE" : ""}`;
+      const masked = document.createElement("small");
+      masked.textContent = profile.masked_key;
+      copy.append(title, masked);
+      row.append(copy);
+      const rename = document.createElement("button");
+      rename.type = "button";
+      rename.textContent = "Rename";
+      let renameInput = null;
+      rename.addEventListener("click", async () => {
+        if (!renameInput) {
+          renameInput = document.createElement("input");
+          renameInput.type = "text";
+          renameInput.value = profile.name;
+          renameInput.maxLength = 80;
+          renameInput.setAttribute("aria-label", "New name for " + profile.name);
+          renameInput.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") { event.preventDefault(); rename.click(); }
+          });
+          copy.replaceChildren(renameInput, masked);
+          rename.textContent = "Save";
+          renameInput.focus();
+          return;
+        }
+        const name = renameInput.value.trim();
+        if (!name) { renameInput.focus(); return; }
+        try {
+          await api(`/api/settings/api-keys/${encodeURIComponent(profile.id)}`, {
+            method: "PATCH", body: JSON.stringify({ name })
+          });
+          await loadApiKeys();
+        } catch (error) { showToast(error.message); }
+      });
+      row.append(rename);
+      if (!profile.active) {
+        const select = document.createElement("button");
+        select.type = "button";
+        select.textContent = "Use";
+        select.addEventListener("click", async () => {
+          try {
+            await api(`/api/settings/api-keys/${encodeURIComponent(profile.id)}/activate`, { method: "PUT" });
+            await loadApiKeys();
+            await showConnectionStatus();
+          } catch (error) { showToast(error.message); }
+        });
+        row.append(select);
+      }
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "Delete";
+      remove.addEventListener("click", async () => {
+        try {
+          await api(`/api/settings/api-keys/${encodeURIComponent(profile.id)}`, { method: "DELETE" });
+          await loadApiKeys();
+          await showConnectionStatus();
+        } catch (error) { showToast(error.message); }
+      });
+      row.append(remove);
+      list.append(row);
+    }
+    if (!data.keys.length) list.textContent = "No saved keys yet.";
+  } catch (error) { list.textContent = error.message; }
 }
 
 $("#apiKeyToggle").addEventListener("click", () => setApiKeyPanel($("#apiKeyPanel").hidden));
 $("#closeApiKey").addEventListener("click", () => setApiKeyPanel(false));
 $("#apiKeyPanel").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const name = $("#apiKeyName").value.trim();
   const key = $("#apiKeyInput").value.trim();
   const message = $("#apiKeyMessage");
   const button = $("#saveApiKey");
   message.classList.remove("success", "error");
-  if (key.length < 16 || /\s/.test(key)) {
-    message.textContent = "Enter a valid API key without spaces.";
+  if (!name || key.length < 16 || /\s/.test(key)) {
+    message.textContent = "Enter a name and a valid API key without spaces.";
     message.classList.add("error");
     return;
   }
   button.disabled = true;
   button.textContent = "Saving…";
   try {
-    await api("/api/settings/api-key", { method: "POST", body: JSON.stringify({ api_key: key }) });
+    await api("/api/settings/api-keys", { method: "POST", body: JSON.stringify({ name, api_key: key }) });
+    $("#apiKeyName").value = "";
     $("#apiKeyInput").value = "";
-    message.textContent = "Saved. Jev will use this key next time too.";
+    message.textContent = "Saved and selected for Jev.";
     message.classList.add("success");
+    await loadApiKeys();
     await showConnectionStatus();
     showToast("API key saved");
   } catch (error) {
@@ -994,7 +1075,7 @@ $("#apiKeyPanel").addEventListener("submit", async (event) => {
     message.classList.add("error");
   } finally {
     button.disabled = false;
-    button.textContent = "Save key";
+    button.textContent = "Save and use";
   }
 });
 
