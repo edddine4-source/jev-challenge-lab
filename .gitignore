@@ -1,0 +1,20 @@
+# Local credentials
+.env
+.env.*
+!.env.example
+
+# Python runtime files
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local application state: API-key settings, saved drafts, and challenge history
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Local preview/runtime files
+.sites-runtime/
+.pytest_cache/
+.coverage

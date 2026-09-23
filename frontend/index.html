@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#070908" />
+    <meta name="description" content="Build typed Jev requests and understand the answers in plain language." />
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+    <link rel="stylesheet" href="/assets/styles.css?v=2.1" />
+    <title>Jev Challenge Lab</title>
+  </head>
+  <body>
+    <div class="signal-banner" aria-hidden="true">
+      <span>JEV DECISION SYSTEM</span>
+      <span>•</span>
+      <span>BUILD THE CONTEXT</span>
+      <span>•</span>
+      <span>CHALLENGE THE MODEL</span>
+    </div>
+    <header class="lab-bar">
+      <div class="brand" aria-label="Jev Challenge Lab">
+        <span class="brand-mark"><i></i></span>
+        <span>JEV / LAB</span>
+      </div>
+      <div class="lab-actions">
+        <button type="button" class="history-button" id="historyToggle" aria-expanded="false" aria-controls="historyDrawer"><span>History</span><b id="historyCount">0</b></button>
+        <button type="button" class="clear-request-button" id="clearRequest"><span>＋</span> New blank request</button>
+        <div class="connection-settings">
+          <div class="connection-card">
+            <span class="connection-dot" id="connectionDot"></span>
+            <div class="connection-copy" aria-live="polite"><strong id="connectionTitle">Checking Jev</strong><span id="connectionText">Decision engine</span></div>
+            <button type="button" class="api-key-toggle" id="apiKeyToggle" aria-expanded="false" aria-controls="apiKeyPanel">API key</button>
+          </div>
+          <form class="api-key-panel" id="apiKeyPanel" hidden>
+            <div class="api-key-heading"><div><b>Use your TypeSafe API key</b><span>Saved privately on this server for next time.</span></div><button type="button" id="closeApiKey" aria-label="Close API key settings">×</button></div>
+            <label for="apiKeyInput">API key</label>
+            <input id="apiKeyInput" name="api_key" type="password" autocomplete="new-password" placeholder="apikey_••••••••••••••••" required minlength="16" />
+            <div class="api-key-actions"><small id="apiKeyMessage">The saved key is never shown in the browser.</small><button type="submit" id="saveApiKey">Save key</button></div>
+          </form>
+        </div>
+      </div>
+    </header>
+    <div class="history-overlay" id="historyOverlay" hidden></div>
+    <aside class="history-drawer" id="historyDrawer" aria-labelledby="historyTitle" hidden>
+      <header class="history-header">
+        <div><p class="eyebrow">LOCAL DATABASE</p><h2 id="historyTitle">Saved work</h2><span>Executed challenges and drafts saved on this server.</span></div>
+        <button type="button" id="closeHistory" aria-label="Close challenge history">×</button>
+      </header>
+      <div class="saved-tabs" role="tablist" aria-label="Saved work">
+        <button type="button" class="active" id="historyTab" data-saved-view="history" role="tab" aria-selected="true">Executions <b id="historyTabCount">0</b></button>
+        <button type="button" id="draftsTab" data-saved-view="drafts" role="tab" aria-selected="false">Drafts <b id="draftCount">0</b></button>
+      </div>
+      <div class="history-toolbar"><span id="historySummary">Loading history…</span><button type="button" id="refreshHistory">Refresh</button></div>
+      <div class="history-list" id="historyList"></div>
+    </aside>
+    <main class="main">
+      <section id="challengeView" class="challenge-view">
+          <header class="challenge-header">
+            <div class="hero-copy">
+              <p class="eyebrow">INTELLIGENCE TESTING INTERFACE / 01</p>
+              <h1><span>Challenge</span><span>Jev AI</span></h1>
+              <p>Give Jev a situation, define the decisions, and receive its structured judgement in clear human language.</p>
+            </div>
+            <div class="hero-signal" aria-hidden="true">
+              <div class="orbit orbit-one"><i></i></div>
+              <div class="orbit orbit-two"></div>
+              <div class="jev-core">J</div>
+              <span class="signal-label">SYSTEM ONLINE</span>
+            </div>
+          </header>
+
+          <div class="example-strip" aria-label="Example challenges">
+            <div class="example-heading"><span>Try an example</span><small>From a quick test to deep nested context</small></div>
+            <div class="example-list">
+              <button class="example-button easy" data-level="Easy" data-example="tone">Message tone</button>
+              <button class="example-button easy" data-level="Easy" data-example="astronomy">Astronomy</button>
+              <button class="example-button medium" data-level="Medium" data-example="purchase">Homelab purchase</button>
+              <button class="example-button medium" data-level="Medium" data-example="news">AI news</button>
+              <button class="example-button advanced" data-level="Advanced" data-example="support">Support routing</button>
+              <button class="example-button advanced" data-level="Advanced" data-example="release">Software release</button>
+              <button class="example-button advanced" data-level="Advanced" data-example="research">Ocean research</button>
+              <button class="example-button advanced" data-level="Advanced" data-example="space">Space mission</button>
+            </div>
+          </div>
+
+          <div class="challenge-grid">
+            <form id="challengeForm" class="challenge-builder">
+              <section class="onboarding-card" id="requestStartCard" aria-labelledby="onboardingTitle">
+                <div class="onboarding-intro">
+                  <p class="eyebrow">BEFORE YOU START</p>
+                  <h2 id="onboardingTitle">Choose how to build your request</h2>
+                  <p><b>Fill the menus</b> step by step, or <b>paste JSON</b> and the app will fill the menus for you. You can edit everything before sending it.</p>
+                </div>
+                <ol class="quick-steps" aria-label="How the Jev challenge works">
+                  <li><span>01</span><div><b>Give the situation</b><small>Add the case and useful context.</small></div></li>
+                  <li><span>02</span><div><b>Add decisions</b><small>Choose what Jev must judge.</small></div></li>
+                  <li><span>03</span><div><b>Review the request</b><small>Check the generated JSON.</small></div></li>
+                  <li><span>04</span><div><b>Ask Jev</b><small>Send the complete request.</small></div></li>
+                  <li><span>05</span><div><b>Read the answer</b><small>See plain text and raw JSON.</small></div></li>
+                </ol>
+              </section>
+
+              <section class="builder-card json-import-card" id="jsonImportCard">
+                <details id="jsonImportPanel">
+                  <summary>
+                    <span class="import-icon">{ }</span>
+                    <span><b>Start with JSON</b><small>Paste a complete Jev request or a shared context object</small></span>
+                  </summary>
+                  <div class="json-import-body">
+                    <textarea id="jsonRequestInput" rows="14" spellcheck="false" placeholder='{
+  "model": "jev-latest",
+  "state": "Describe the situation",
+  "questions": {
+    "decision": {
+      "type": "choice",
+      "criteria": { "option_a": "...", "option_b": "..." }
+    }
+  }
+}'></textarea>
+                    <div class="json-import-actions">
+                      <p id="jsonImportMessage">Your API key remains on the server.</p>
+                      <button type="button" class="import-json-button" id="importJsonRequest">Convert JSON to menus</button>
+                    </div>
+                  </div>
+                </details>
+              </section>
+
+              <section class="builder-card" id="situationCard">
+                <div class="builder-heading"><span class="step-number">1</span><div><h2>Give Jev the situation</h2><p>This becomes the shared <b>state</b> for every question.</p></div></div>
+                <div class="state-toolbar">
+                  <label class="compact-field">Input format
+                    <select id="stateFormat"><option value="text">Plain text</option><option value="json">JSON object or list</option></select>
+                  </label>
+                  <label class="compact-field">Model
+                    <input id="jevModel" value="jev-latest" autocomplete="off" />
+                  </label>
+                </div>
+                <div class="context-facts-heading">
+                  <div><b>Shared context</b><span>Add background, rules, facts, limits, history, or any other useful data.</span></div>
+                  <button type="button" class="add-context-button" id="addContextFact">+ Add context</button>
+                </div>
+                <div id="contextFacts" class="context-facts"></div>
+                <textarea id="challengeState" class="large-input" rows="7" required placeholder="Example: A customer writes: I was charged twice and need the duplicate payment returned today."></textarea>
+                <p class="input-hint" id="stateHint">Add the case or content Jev should judge. Business context and content are combined into the shared state.</p>
+              </section>
+
+              <section class="builder-card">
+                <div class="builder-heading questions-heading"><span class="step-number">2</span><div><h2>Add decisions</h2><p>Mix question types. Each decision can also have its own private context.</p></div></div>
+                <div id="questionList" class="question-list"></div>
+                <div class="add-question-row">
+                  <button type="button" class="type-button" data-add-type="choice"><b>Choice</b><span>Pick one option</span></button>
+                  <button type="button" class="type-button" data-add-type="score"><b>Score</b><span>Rate on a scale</span></button>
+                  <button type="button" class="type-button" data-add-type="noul"><b>Yes / No</b><span>Estimate probability</span></button>
+                </div>
+              </section>
+
+              <section class="builder-card json-card">
+                <div class="builder-heading"><span class="step-number">3</span><div><h2>Review the request</h2><p>This is the exact JSON your server will send to Jev.</p></div></div>
+                <pre id="requestPreview" class="json-preview"></pre>
+              </section>
+
+              <div class="submit-actions">
+                <button class="save-draft-button" id="saveDraft" type="button"><span>Save draft</span><small>Complete or incomplete</small></button>
+                <button class="run-jev-button" id="runJev" type="submit"><span>Ask Jev</span><small>Send all decisions in one request</small></button>
+              </div>
+            </form>
+
+            <aside class="challenge-results" id="challengeResults">
+              <div class="results-placeholder">
+                <span class="result-orb">J</span>
+                <h2>Your answer will appear here</h2>
+                <p>Jev returns typed decisions and probabilities. The lab translates them into plain language.</p>
+              </div>
+            </aside>
+          </div>
+        </section>
+    </main>
+    <div class="toast" id="toast" role="status"></div>
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>
