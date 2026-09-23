@@ -33,7 +33,17 @@ Jev is strongest when a decision is clearly described: the available options, th
 
 ### Run with Python
 
-**Requirements:** Python 3.12 or later, and a TypeSafe Jev API key.
+**Requirements:** Python 3.10 or later, and a TypeSafe Jev API key. Docker is optional.
+
+For the quickest local start on Linux or macOS:
+
+```bash
+./run-local.sh
+```
+
+The script creates a local Python environment, installs the required packages, creates a private `.env` file if needed, and starts the service.
+
+To install each part yourself:
 
 ```bash
 git clone https://github.com/edddine4-source/jev-challenge-lab.git
@@ -56,7 +66,9 @@ TYPESAFE_API_KEY=your_typesafe_jev_api_key
 
 You can also select **Add key** in the app’s top bar. The app saves that key privately in `data/settings.json`, with permissions restricted to its owner. A key saved in the interface takes priority over the `.env` value.
 
-### Run with Docker
+On Windows, activate the virtual environment with `.venv\\Scripts\\activate`, install with `python -m pip install -r requirements.txt`, then start with `python -m uvicorn backend.app:app --host 127.0.0.1 --port 8765`.
+
+### Optional: run with Docker
 
 ```bash
 git clone https://github.com/edddine4-source/jev-challenge-lab.git
