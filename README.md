@@ -155,6 +155,9 @@ If you expose this service beyond your home network, place it behind authenticat
 backend/        FastAPI application and Jev API proxy
 frontend/       Single-page interface, styling, and editor behavior
 data/           Local API-key settings, history, and drafts (ignored by Git)
+BarWidget.qml   Omarchy Quattro bar entry point
+manifest.json   Omarchy plugin metadata
+bin/            Local-service launcher used by the Omarchy plugin
 compose.yaml    Docker Compose configuration
 ```
 
@@ -164,6 +167,12 @@ compose.yaml    Docker Compose configuration
 .venv/bin/python -m py_compile backend/app.py
 node --check frontend/app.js
 curl http://127.0.0.1:8765/api/health
+```
+
+For the Omarchy package, validate a clean plugin checkout with:
+
+```bash
+omarchy plugin validate .
 ```
 
 ## License
