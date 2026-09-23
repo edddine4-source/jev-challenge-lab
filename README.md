@@ -18,13 +18,15 @@ A self-hosted web interface for building, reviewing, and sending typed requests 
 ## Run locally
 
 ```bash
-cd outputs/feedpilot
-python -m uvicorn backend.app:app --host 127.0.0.1 --port 8765
+python -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp .env.example .env
+.venv/bin/uvicorn backend.app:app --host 127.0.0.1 --port 8765
 ```
 
 Open `http://127.0.0.1:8765/`.
 
-Store the TypeSafe key in `.env`:
+Add the TypeSafe key to `.env`:
 
 ```dotenv
 TYPESAFE_API_KEY=your_key_here
