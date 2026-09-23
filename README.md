@@ -1,47 +1,138 @@
 # Jev Challenge Lab
 
-A self-hosted web interface for building, reviewing, and sending typed requests to the TypeSafe Jev API.
+> A private, self-hosted workspace for designing structured Jev questions, testing them with context, and keeping a useful record of the answers.
 
-## What it does
+Jev Challenge Lab gives you a friendly visual editor for the [TypeSafe Jev](https://www.typesafe.ai/) API. Build a question from menus or paste JSON, add the situation Jev should consider, review the exact request, and read the returned decision in plain language.
 
-- Builds `choice`, `score`, and `noul` (yes/no probability) questions with visual menus.
-- Adds shared context as text, numbers, booleans, lists, objects, and nested groups.
-- Imports a complete Jev request or a context-only JSON object into the visual editor.
-- Shows the exact JSON before it is sent.
-- Sends the request through the local server, keeping the API key out of the browser.
-- Lets the user add or replace the API key from the connection panel. The server saves it privately for future sessions and never returns it to the browser.
-- Translates Jev's typed JSON response into plain language and probability bars.
-- Saves every successful execution to a local SQLite history with its request, response, timestamp, model, and decision count.
-- Reopens saved requests and answers, and supports renaming, deleting, and reusing them.
-- Saves complete requests before they are sent, as well as incomplete work-in-progress drafts. Reopen either from **History** and continue editing later.
+Your API key stays on your server. Your drafts and challenge history stay in your local SQLite database.
 
-## Run locally
+## Why use it?
+
+Jev is strongest when a decision is clearly described: the available options, the context that matters, and the kind of answer you need. This app makes that process easier to explore and repeat.
+
+| You want to… | Jev Challenge Lab helps you… |
+| --- | --- |
+| Explore an idea | Add rich text, lists, numbers, objects, and nested context. |
+| Compare possible outcomes | Ask a `choice`, `score`, or `noul` probability question. |
+| Work directly with the API | Paste a full JSON request and turn it into editable form fields. |
+| Understand a response | See the raw JSON and a readable explanation with probability bars. |
+| Iterate over time | Save an unfinished draft or reopen, rename, reuse, and delete completed challenges. |
+
+## Features
+
+- **Visual request builder** — construct typed questions without writing JSON by hand.
+- **JSON import and export** — paste a Jev request or context object, inspect the generated payload before sending, and reuse it elsewhere.
+- **Shared and nested context** — describe the background situation once, then organize details into groups, lists, and objects.
+- **Three decision formats** — `choice` for selecting among options, `score` for evaluating a scale, and `noul` for a yes/no probability.
+- **Readable results** — translate the typed response into plain language while preserving the original response JSON.
+- **Saved work** — keep complete requests, incomplete drafts, and successful executions in a local SQLite database.
+- **Local credential storage** — add or change the API key in the interface; it is saved only on the machine running the app and is never sent to the browser.
+- **Responsive layout** — results appear below the editor on narrow screens and in their own scrollable panel beside it on larger screens.
+
+## Quick start
+
+### Run with Python
+
+**Requirements:** Python 3.12 or later, and a TypeSafe Jev API key.
 
 ```bash
+git clone https://github.com/edddine4-source/jev-challenge-lab.git
+cd jev-challenge-lab
+
 python -m venv .venv
 .venv/bin/pip install -r requirements.txt
 cp .env.example .env
+
 .venv/bin/uvicorn backend.app:app --host 127.0.0.1 --port 8765
 ```
 
-Open `http://127.0.0.1:8765/`.
+Open [http://127.0.0.1:8765/](http://127.0.0.1:8765/) in your browser.
 
-Add the TypeSafe key to `.env`:
+Add your key to `.env`:
 
 ```dotenv
-TYPESAFE_API_KEY=your_key_here
+TYPESAFE_API_KEY=your_typesafe_jev_api_key
 ```
 
-You can also select **Add key** or **Change key** under the Jev connection status. Keys saved from the interface are stored in the ignored `data/settings.json` file with owner-only permissions and take precedence over `.env`.
+You can also select **Add key** in the app’s top bar. The app saves that key privately in `data/settings.json`, with permissions restricted to its owner. A key saved in the interface takes priority over the `.env` value.
 
-Saved executions and drafts are stored in the ignored `data/history.db` SQLite database. Select **History** in the top bar to open, reuse, rename, delete, or continue saved work. A draft is marked **Complete request** when the current form can be sent to Jev; otherwise it is marked **Incomplete draft** and keeps every field exactly as entered.
-
-## Docker
+### Run with Docker
 
 ```bash
+git clone https://github.com/edddine4-source/jev-challenge-lab.git
+cd jev-challenge-lab
+
+cp .env.example .env
+# Add TYPESAFE_API_KEY to .env, then start the service
 docker compose up --build
 ```
 
-Open `http://127.0.0.1:8787/`.
+Open [http://127.0.0.1:8787/](http://127.0.0.1:8787/). Docker mounts `./data` into the container, so your saved key, drafts, and history remain after a restart.
 
-Docker mounts the local `data` directory so saved keys and challenge history remain available after the container restarts.
+## How to use the lab
+
+1. **Start with JSON** — choose whether to fill the visual editor or paste an existing Jev JSON request. Pasting JSON fills the menus for you.
+2. **Give Jev the situation** — add shared context that applies to the whole request. Use groups to keep larger situations clear.
+3. **Add a decision** — choose `choice`, `score`, or `noul`, then describe the question and its options or scale.
+4. **Review and challenge Jev** — inspect the generated JSON, then submit it when it reflects the question you mean to ask.
+5. **Read and keep the result** — use the plain-language answer for a quick interpretation, or open raw JSON for the complete API response. Save drafts before sending or return to prior executions from **Saved work**.
+
+## Example request
+
+This is the kind of request the visual editor creates. Context describes the situation; `questions` contains the decision Jev should evaluate.
+
+```json
+{
+  "context": {
+    "goal": "Choose a safe observation plan for a home telescope session.",
+    "conditions": {
+      "cloud_cover_percent": 35,
+      "wind_kph": 18,
+      "moon_phase": "first quarter"
+    }
+  },
+  "questions": {
+    "observation_plan": {
+      "type": "choice",
+      "question": "Which plan is most likely to produce useful images tonight?",
+      "options": [
+        "Photograph the Moon with a short exposure",
+        "Attempt long-exposure deep-sky imaging",
+        "Postpone the session"
+      ]
+    }
+  }
+}
+```
+
+## Data and privacy
+
+The app is designed for a self-hosted environment.
+
+- Your browser sends requests to this local app; the local app sends the Jev payload to TypeSafe using your server-side API key.
+- The API key is never returned by the API and is not stored in browser storage.
+- Execution history and drafts are stored in `data/history.db` on the host machine.
+- Private local files are excluded from Git by default: `.env`, `data/`, virtual environments, and runtime logs.
+
+If you expose this service beyond your home network, place it behind authentication and HTTPS before entering a key or storing any sensitive context.
+
+## Project layout
+
+```text
+backend/        FastAPI application and Jev API proxy
+frontend/       Single-page interface, styling, and editor behavior
+data/           Local API-key settings, history, and drafts (ignored by Git)
+compose.yaml    Docker Compose configuration
+```
+
+## Development checks
+
+```bash
+.venv/bin/python -m py_compile backend/app.py
+node --check frontend/app.js
+curl http://127.0.0.1:8765/api/health
+```
+
+## License
+
+Released under the [MIT License](LICENSE).
