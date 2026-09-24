@@ -8,9 +8,9 @@ set -euo pipefail
 plugin_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/jev-challenge-lab"
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/jev-challenge-lab"
-venv_dir="$data_dir/venv"
 log_file="$state_dir/service.log"
 url="http://127.0.0.1:8766"
+system_python=/usr/bin/python3
 
 mkdir -p "$data_dir" "$state_dir"
 chmod 700 "$data_dir" "$state_dir"
@@ -25,17 +25,26 @@ is_our_service_running() {
 }
 
 if ! is_our_service_running; then
-  if ! command -v python3 >/dev/null 2>&1; then
+  if [ ! -x "$system_python" ]; then
     notify_error "Python 3 is required. Install python, then open the lab again."
     exit 1
   fi
 
+  # A new lock or Python version gets a fresh environment, so packages from a
+  # previous, unverified install cannot satisfy the dependency check.
+  lock_hash=$(sha256sum "$plugin_dir/requirements.lock" | cut -d ' ' -f 1)
+  python_version=$("$system_python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+  venv_dir="$data_dir/venv-$python_version-${lock_hash:0:16}"
+  ready_marker="$venv_dir/.jev-dependencies-installed"
+
   if [ ! -x "$venv_dir/bin/python" ]; then
-    python3 -m venv "$venv_dir"
+    "$system_python" -m venv "$venv_dir"
   fi
 
-  if ! "$venv_dir/bin/python" -c 'import fastapi, httpx, dotenv, uvicorn' >/dev/null 2>&1; then
-    "$venv_dir/bin/python" -m pip install --disable-pip-version-check --quiet -r "$plugin_dir/requirements.txt"
+  if [ ! -f "$ready_marker" ]; then
+    "$venv_dir/bin/python" -m pip install --disable-pip-version-check --quiet \
+      --require-hashes --only-binary=:all: -r "$plugin_dir/requirements.lock"
+    touch "$ready_marker"
   fi
 
   JEV_SETTINGS_FILE="$state_dir/settings.json" \

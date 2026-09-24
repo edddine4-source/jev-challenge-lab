@@ -6,7 +6,7 @@ if [ ! -x ".venv/bin/python" ]; then
   python3 -m venv .venv
 fi
 
-.venv/bin/python -m pip install --quiet -r requirements.txt
+.venv/bin/python -m pip install --quiet --require-hashes --only-binary=:all: -r requirements.lock
 
 if [ ! -f ".env" ]; then
   cp .env.example .env

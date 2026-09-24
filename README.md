@@ -16,7 +16,7 @@ Install it directly from this repository on Omarchy Quattro:
 omarchy plugin add https://github.com/edddine4-source/jev-challenge-lab.git --enable
 ```
 
-The first click creates a private Python virtual environment in `~/.local/share/jev-challenge-lab/` and downloads the packages listed in `requirements.txt`. This requires Python 3 and internet access once. The launcher uses `bash`, `curl`, and desktop notifications supplied by Omarchy; it starts a local service on `127.0.0.1:8766` for the widget to call. The app's API key, drafts, history, and service log are kept in `~/.local/state/jev-challenge-lab/`, outside the plugin folder. No administrator privileges are used.
+The first click creates a private Python virtual environment in `~/.local/share/jev-challenge-lab/` and installs the exact, hash-verified packages in `requirements.lock`. This requires Python 3 and internet access once. A changed lock creates a fresh environment. The launcher uses `bash`, `curl`, and desktop notifications supplied by Omarchy; it starts a local service on `127.0.0.1:8766` for the widget to call. The app's API key, drafts, history, and service log are kept in `~/.local/state/jev-challenge-lab/`, outside the plugin folder. No administrator privileges are used.
 
 To remove it, use:
 
@@ -72,7 +72,7 @@ git clone https://github.com/edddine4-source/jev-challenge-lab.git
 cd jev-challenge-lab
 
 python -m venv .venv
-.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m pip install --require-hashes --only-binary=:all: -r requirements.lock
 cp .env.example .env
 
 .venv/bin/uvicorn backend.app:app --host 127.0.0.1 --port 8765
@@ -88,7 +88,7 @@ TYPESAFE_API_KEY=your_typesafe_jev_api_key
 
 You can also select **API keys** in the app’s top bar. Name each key and choose the active one. The app saves keys privately in `data/settings.json`, with permissions restricted to its owner. A selected key takes priority over the `.env` value.
 
-On Windows, activate the virtual environment with `.venv\Scripts\activate`, install with `python -m pip install -r requirements.txt`, then start with `python -m uvicorn backend.app:app --host 127.0.0.1 --port 8765`.
+On Windows, activate the virtual environment with `.venv\Scripts\activate`, install with `python -m pip install --require-hashes --only-binary=:all: -r requirements.lock`, then start with `python -m uvicorn backend.app:app --host 127.0.0.1 --port 8765`.
 
 ### Optional: run with Docker
 
