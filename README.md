@@ -144,11 +144,12 @@ This is the kind of request the visual editor creates. Context describes the sit
 The app is designed for a self-hosted environment.
 
 - Your browser sends requests to this local app; the local app sends the Jev payload to TypeSafe using your server-side API key.
+- The service rejects untrusted HTTP hosts and cross-origin browser requests, including DNS-rebinding attempts. Only loopback hostnames are allowed by default.
 - The API key is never returned by the API and is not stored in browser storage.
 - Execution history and drafts are stored in `data/history.db` on the host machine.
 - Private local files are excluded from Git by default: `.env`, `data/`, virtual environments, and runtime logs.
 
-If you expose this service beyond your home network, place it behind authentication and HTTPS before entering a key or storing any sensitive context.
+Docker Compose also publishes only to `127.0.0.1` by default. If you use an authenticated reverse proxy, set `JEV_ALLOWED_HOSTS` to its exact hostname (comma-separated for several names) and configure the proxy/server to pass the trusted external scheme so Origin checks match. The host allowlist is not user authentication; do not expose the API to a network without an authentication layer and HTTPS.
 
 ## Project layout
 
@@ -169,6 +170,7 @@ compose.yaml    Docker Compose configuration
 
 ```bash
 .venv/bin/python -m py_compile backend/app.py
+.venv/bin/python -m unittest discover -s tests -v
 node --check frontend/app.js
 curl http://127.0.0.1:8765/api/health
 ```

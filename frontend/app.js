@@ -313,7 +313,7 @@ function contextValueField(type, value = "") {
 }
 
 function contextFactRow(fact = {}) {
-  const type = fact.type || "text";
+  const type = ["text", "number", "boolean", "json", "group"].includes(fact.type) ? fact.type : "text";
   return `
     <div class="context-fact-row" data-context-type="${type}">
       <div class="context-fact-meta">
@@ -578,7 +578,7 @@ function criterionRow(type, key = "", description = "", index = 0) {
 
 function questionCard(question = { type: "choice" }) {
   const id = ++questionSequence;
-  const type = question.type || "choice";
+  const type = ["choice", "score", "noul"].includes(question.type) ? question.type : "choice";
   const labels = { choice: "Choice", score: "Score", noul: "Yes / No" };
   let criteria = "";
   if (type === "choice") {
@@ -745,12 +745,15 @@ function renderChallengeResult(result) {
       <h2>${result.interpretation.length} decision${result.interpretation.length === 1 ? "" : "s"} completed</h2>
       <p>Answered by <b>${escapeHtml(result.response.model)}</b> using ${Number(usage.input_tokens || 0).toLocaleString()} input tokens.</p>
     </div>
-    <div class="answer-list">${result.interpretation.map((item) => `
+    <div class="answer-list">${result.interpretation.map((item) => {
+      const type = ["choice", "score", "noul"].includes(item.type) ? item.type : "unknown";
+      return `
       <article class="answer-card">
-        <div class="answer-heading"><span class="question-type ${item.type}">${item.type === "noul" ? "Yes / No" : item.type}</span><h3>${escapeHtml(item.name.replaceAll("_", " "))}</h3></div>
+        <div class="answer-heading"><span class="question-type ${type}">${type === "noul" ? "Yes / No" : type}</span><h3>${escapeHtml(item.name.replaceAll("_", " "))}</h3></div>
         <p>${escapeHtml(item.text)}</p>
         <div class="probability-list">${probabilityRows(item.details, answers[item.name])}</div>
-      </article>`).join("")}</div>
+      </article>`;
+    }).join("")}</div>
     <details class="raw-response"><summary>See Jev’s raw JSON reply</summary><pre>${escapeHtml(JSON.stringify(result.response, null, 2))}</pre></details>`;
 }
 

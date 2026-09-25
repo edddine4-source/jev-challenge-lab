@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import json
 import sqlite3
+from urllib.parse import urlsplit
 from uuid import uuid4
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,9 +12,10 @@ from typing import Any
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.datastructures import Headers
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
@@ -167,6 +169,61 @@ def store_challenge_history(request_json: dict[str, Any], response_json: dict[st
 app = FastAPI(title="Jev Challenge Lab", version="2.0.0")
 app.state.api_keys, app.state.active_api_key_id = load_api_key_settings()
 initialize_history()
+
+
+def allowed_request_host(host: str) -> bool:
+    """Reject rebinding hostnames, even when they resolve to loopback."""
+    try:
+        parsed = urlsplit(f"//{host}")
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError:
+        return False
+    if not hostname or parsed.username is not None or parsed.password is not None or parsed.path or parsed.query or parsed.fragment:
+        return False
+    if port is not None and not 1 <= port <= 65535:
+        return False
+    allowed = {"127.0.0.1", "localhost", "::1"}
+    allowed.update(name.strip().lower() for name in os.getenv("JEV_ALLOWED_HOSTS", "").split(",") if name.strip())
+    return hostname.lower() in allowed
+
+
+class LocalRequestBoundary:
+    def __init__(self, wrapped_app):
+        self.wrapped_app = wrapped_app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.wrapped_app(scope, receive, send)
+            return
+
+        headers = Headers(scope=scope)
+        hosts = headers.getlist("host")
+        reason = None
+        if len(hosts) != 1 or not allowed_request_host(hosts[0]):
+            reason = "Untrusted request host."
+        else:
+            origin = headers.get("origin")
+            expected_origin = f"{scope['scheme']}://{hosts[0]}"
+            # QML may use a null Origin. Browsers cannot send this non-simple
+            # header cross-origin without a preflight, which this guard denies.
+            widget_request = headers.get("x-jev-widget") == "1"
+            if origin and origin != expected_origin and not (origin == "null" and widget_request):
+                reason = "Untrusted request origin."
+            referer = headers.get("referer")
+            if referer and not referer.startswith(expected_origin + "/"):
+                reason = "Untrusted request origin."
+            fetch_site = headers.get("sec-fetch-site")
+            if fetch_site and fetch_site not in {"same-origin", "none"}:
+                reason = "Cross-site requests are not allowed."
+
+        if reason:
+            await JSONResponse({"detail": reason}, status_code=403)(scope, receive, send)
+            return
+        await self.wrapped_app(scope, receive, send)
+
+
+app.add_middleware(LocalRequestBoundary)
 
 
 class JevChallengeRequest(BaseModel):

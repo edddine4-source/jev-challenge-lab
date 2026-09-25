@@ -48,6 +48,7 @@ Panel {
     var xhr = new XMLHttpRequest()
     xhr.open(method, baseUrl + path)
     xhr.setRequestHeader("Content-Type", "application/json")
+    xhr.setRequestHeader("X-Jev-Widget", "1")
     xhr.onreadystatechange = function() {
       if (xhr.readyState !== 4) return
       var data = null
@@ -365,8 +366,9 @@ Panel {
           label = String(pair[0]) + " · " + answer.legend[String(pair[0])]
         return { label: label, percent: value }
       })
+      var answerType = ["choice", "score", "noul"].indexOf(item.type) >= 0 ? item.type : "decision"
       return { name: String(item.name || "Decision").replace(/_/g, " "),
-        type: item.type || "decision", text: item.text || "", details: details }
+        type: answerType, text: String(item.text || ""), details: details }
     })
     resultModel = String(data.response && data.response.model || "Jev")
     resultTokens = Number(data.response && data.response.usage && data.response.usage.input_tokens || 0)
@@ -597,6 +599,7 @@ Panel {
             Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 28; color: "#485443" }
             Text {
               text: root.statusText
+              textFormat: Text.PlainText
               color: "#d0d7c8"
               font.pixelSize: 12
               elide: Text.ElideRight
@@ -1231,6 +1234,7 @@ Panel {
                   Text {
                     Layout.fillWidth: true
                     text: root.resultText || "Choose an example or build a request on the left. Ask Jev to see its answer here."
+                    textFormat: Text.PlainText
                     color: "#1f291d"
                     font.pixelSize: 13
                     lineHeight: 1.25
@@ -1244,6 +1248,7 @@ Panel {
                 text: root.resultItems.length + (root.resultItems.length === 1 ? " DECISION" : " DECISIONS")
                   + " COMPLETED  ·  " + root.resultModel
                   + (root.resultTokens ? "  ·  " + root.resultTokens + " INPUT TOKENS" : "")
+                textFormat: Text.PlainText
                 color: "#3b4d32"
                 font.pixelSize: 11
                 font.bold: true
@@ -1276,6 +1281,7 @@ Panel {
                           id: typeLabel
                           anchors.centerIn: parent
                           text: answerCard.modelData.type === "noul" ? "YES / NO" : answerCard.modelData.type.toUpperCase()
+                          textFormat: Text.PlainText
                           color: "#080a09"
                           font.pixelSize: 10
                           font.bold: true
@@ -1284,6 +1290,7 @@ Panel {
                       Text {
                         Layout.fillWidth: true
                         text: answerCard.modelData.name.toUpperCase()
+                        textFormat: Text.PlainText
                         color: "#111a10"
                         font.pixelSize: 12
                         font.bold: true
@@ -1293,6 +1300,7 @@ Panel {
                     Text {
                       Layout.fillWidth: true
                       text: answerCard.modelData.text
+                      textFormat: Text.PlainText
                       color: "#303b2d"
                       font.pixelSize: 13
                       lineHeight: 1.2
@@ -1309,6 +1317,7 @@ Panel {
                           Text {
                             Layout.fillWidth: true
                             text: modelData.label
+                            textFormat: Text.PlainText
                             color: "#374333"
                             font.pixelSize: 11
                             wrapMode: Text.WordWrap

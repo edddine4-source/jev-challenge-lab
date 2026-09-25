@@ -4,10 +4,11 @@ services:
     container_name: jev-challenge
     restart: unless-stopped
     ports:
-      - "8787:8000"
+      - "127.0.0.1:8787:8000"
     environment:
       TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
       JEV_SETTINGS_FILE: /app/data/settings.json
       JEV_HISTORY_DB: /app/data/history.db
+      JEV_ALLOWED_HOSTS: ${JEV_ALLOWED_HOSTS:-}
     volumes:
       - ./data:/app/data
