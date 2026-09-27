@@ -144,7 +144,7 @@ This is the kind of request the visual editor creates. Context describes the sit
 The app is designed for a self-hosted environment.
 
 - Your browser sends requests to this local app; the local app sends the Jev payload to TypeSafe using your server-side API key.
-- Every `/api/*` route requires a local **service token** (`Authorization: Bearer …` or the `jev_service_token` HttpOnly cookie). The Omarchy launcher creates `~/.local/state/jev-challenge-lab/service.token` (mode `0600`), exports `JEV_SERVICE_TOKEN`, and arms a short one-shot browser claim so the UI can obtain the cookie without putting the token in `xdg-open` argv. The panel reads the same file and sends Bearer. The host allowlist is **not** authentication.
+- Every `/api/*` route requires a local **service token** (`Authorization: Bearer …` or the `jev_service_token` HttpOnly cookie). The Omarchy launcher creates `~/.local/state/jev-challenge-lab/service.token` (mode `0600`), exports `JEV_SERVICE_TOKEN`, and arms a short one-shot claim window with an ephemeral single-use ticket passed in the URL fragment (`#claim_ticket=…`) so the browser UI exchanges it for an HttpOnly cookie without exposing credentials in unauthenticated endpoints or HTTP requests. The panel reads the same file and sends Bearer. The host allowlist is **not** authentication.
 - The service also rejects untrusted HTTP hosts and cross-origin browser requests, including DNS-rebinding attempts. Only loopback hostnames are allowed by default.
 - The TypeSafe API key is never returned by the API and is not stored in browser storage.
 - Execution history and drafts are stored in `data/history.db` on the host machine (or the XDG state dir for the Omarchy plugin).

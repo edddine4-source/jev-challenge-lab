@@ -95,10 +95,13 @@ if ! is_our_service_running; then
 fi
 
 if [ "${1:-}" != "--service-only" ]; then
-  # Arm a short one-shot claim window, then open the UI without putting the
-  # long-lived service token in xdg-open argv / process listings.
-  curl --fail --silent --max-time 2 \
+  # Arm a short one-shot claim window and retrieve the ephemeral single-use ticket.
+  claim_ticket=$(curl --fail --silent --max-time 2 \
     -H "Authorization: Bearer ${JEV_SERVICE_TOKEN}" \
-    -X POST "$url/api/session/prepare-browser" >/dev/null 2>&1 || true
-  xdg-open "${url}/" >/dev/null 2>&1 &
+    -X POST "$url/api/session/prepare-browser" | "$system_python" -c "import sys, json; print(json.load(sys.stdin).get('ticket', ''))" 2>/dev/null || true)
+  if [ -n "$claim_ticket" ]; then
+    xdg-open "${url}/#claim_ticket=${claim_ticket}" >/dev/null 2>&1 &
+  else
+    xdg-open "${url}/" >/dev/null 2>&1 &
+  fi
 fi

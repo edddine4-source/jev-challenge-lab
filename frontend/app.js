@@ -9,11 +9,40 @@ function escapeHtml(value = "") {
 
 let sessionClaimAttempted = false;
 
+function extractClaimTicket() {
+  const hash = window.location.hash || "";
+  if (hash.startsWith("#")) {
+    const params = new URLSearchParams(hash.slice(1));
+    const ticket = params.get("claim_ticket");
+    if (ticket) {
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+      return ticket;
+    }
+  }
+  const queryParams = new URLSearchParams(window.location.search);
+  const queryTicket = queryParams.get("claim_ticket");
+  if (queryTicket) {
+    queryParams.delete("claim_ticket");
+    const newSearch = queryParams.toString();
+    history.replaceState(null, "", window.location.pathname + (newSearch ? `?${newSearch}` : "") + window.location.hash);
+    return queryTicket;
+  }
+  return "";
+}
+
+const pendingClaimTicket = extractClaimTicket();
+
 async function ensureBrowserSession() {
   if (sessionClaimAttempted) return;
   sessionClaimAttempted = true;
+  if (!pendingClaimTicket) return;
   try {
-    await fetch("/session/claim", { method: "POST", credentials: "same-origin" });
+    await fetch("/session/claim", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticket: pendingClaimTicket }),
+    });
   } catch (_) {
     /* Launcher may not have armed a claim window; cookie may already exist. */
   }
