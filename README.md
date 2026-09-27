@@ -144,12 +144,16 @@ This is the kind of request the visual editor creates. Context describes the sit
 The app is designed for a self-hosted environment.
 
 - Your browser sends requests to this local app; the local app sends the Jev payload to TypeSafe using your server-side API key.
-- The service rejects untrusted HTTP hosts and cross-origin browser requests, including DNS-rebinding attempts. Only loopback hostnames are allowed by default.
-- The API key is never returned by the API and is not stored in browser storage.
-- Execution history and drafts are stored in `data/history.db` on the host machine.
+- Every `/api/*` route requires a local **service token** (`Authorization: Bearer …` or the `jev_service_token` HttpOnly cookie). The Omarchy launcher creates `~/.local/state/jev-challenge-lab/service.token` (mode `0600`), exports `JEV_SERVICE_TOKEN`, and arms a short one-shot browser claim so the UI can obtain the cookie without putting the token in `xdg-open` argv. The panel reads the same file and sends Bearer. The host allowlist is **not** authentication.
+- The service also rejects untrusted HTTP hosts and cross-origin browser requests, including DNS-rebinding attempts. Only loopback hostnames are allowed by default.
+- The TypeSafe API key is never returned by the API and is not stored in browser storage.
+- Execution history and drafts are stored in `data/history.db` on the host machine (or the XDG state dir for the Omarchy plugin).
 - Private local files are excluded from Git by default: `.env`, `data/`, virtual environments, and runtime logs.
+- Interactive FastAPI `/docs`, `/redoc`, and `/openapi.json` are disabled in the plugin runtime.
 
-Docker Compose also publishes only to `127.0.0.1` by default. If you use an authenticated reverse proxy, set `JEV_ALLOWED_HOSTS` to its exact hostname (comma-separated for several names) and configure the proxy/server to pass the trusted external scheme so Origin checks match. The host allowlist is not user authentication; do not expose the API to a network without an authentication layer and HTTPS.
+Docker Compose also publishes only to `127.0.0.1` by default. The image defaults to binding `127.0.0.1` inside the container; Compose sets `UVICORN_HOST=0.0.0.0` so published ports work while the **host** publish remains loopback-only.
+
+**`JEV_ALLOWED_HOSTS` footgun:** only add hostnames when an authenticated reverse proxy terminates TLS in front of this app. Never combine a non-loopback published port (or a LAN bind) with `JEV_ALLOWED_HOSTS` — that turns the Host/Origin checks into a remote unauthenticated surface unless the service token stays secret and the proxy enforces auth. Prefer leaving `JEV_ALLOWED_HOSTS` empty on a desktop install.
 
 ## Project layout
 
@@ -172,7 +176,8 @@ compose.yaml    Docker Compose configuration
 .venv/bin/python -m py_compile backend/app.py
 .venv/bin/python -m unittest discover -s tests -v
 node --check frontend/app.js
-curl http://127.0.0.1:8765/api/health
+# Health requires the local service token:
+curl -H "Authorization: Bearer $JEV_SERVICE_TOKEN" http://127.0.0.1:8766/api/health
 ```
 
 For the Omarchy package, validate a clean plugin checkout with:

@@ -6,7 +6,9 @@ services:
     ports:
       - "127.0.0.1:8787:8000"
     environment:
+      UVICORN_HOST: "0.0.0.0"
       TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+      JEV_SERVICE_TOKEN: ${JEV_SERVICE_TOKEN:-}
       JEV_SETTINGS_FILE: /app/data/settings.json
       JEV_HISTORY_DB: /app/data/history.db
       JEV_ALLOWED_HOSTS: ${JEV_ALLOWED_HOSTS:-}

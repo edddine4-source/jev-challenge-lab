@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import os
 import json
+import logging
+import secrets
 import sqlite3
+import time
 from urllib.parse import urlsplit
 from uuid import uuid4
 from datetime import datetime, timezone
@@ -24,6 +27,101 @@ JEV_URL = "https://api.typesafe.ai/v1/systemone"
 SETTINGS_FILE = Path(os.getenv("JEV_SETTINGS_FILE", ROOT / "data" / "settings.json"))
 EXAMPLES_FILE = SETTINGS_FILE.with_name("hidden_examples.json")
 HISTORY_DB = Path(os.getenv("JEV_HISTORY_DB", ROOT / "data" / "history.db"))
+SERVICE_TOKEN_COOKIE = "jev_service_token"
+MAX_DRAFT_JSON_BYTES = 512_000
+MAX_CHALLENGE_STATE_BYTES = 256_000
+MAX_CRITERIA_VALUE_BYTES = 16_000
+MAX_HISTORY_LIST_ROWS = 200
+MAX_DRAFT_LIST_ROWS = 200
+DEFAULT_HISTORY_LIST_ROWS = 50
+BROWSER_CLAIM_WINDOW_SECONDS = 15
+logger = logging.getLogger("jev-challenge-lab")
+_browser_claim_deadline: float | None = None
+
+
+def ensure_private_dir(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    try:
+        if path.is_symlink():
+            return
+        path.chmod(0o700)
+    except OSError:
+        pass
+
+
+def write_private_text(path: Path, content: str) -> None:
+    """Atomically write text with 0600, refusing to follow a symlink destination."""
+    ensure_private_dir(path.parent)
+    if path.is_symlink():
+        raise OSError(f"Refusing to write through symlink: {path}")
+    temporary = path.with_name(f"{path.name}.{os.getpid()}.{secrets.token_hex(8)}.tmp")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    fd = os.open(temporary, flags, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
+    except Exception:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+
+def chmod_private_file(path: Path) -> None:
+    """chmod 0600 only for a regular file (never follow a symlink)."""
+    try:
+        if path.is_symlink() or not path.is_file():
+            return
+        path.chmod(0o600)
+    except OSError:
+        pass
+
+
+def resolve_service_token() -> str:
+    """Load JEV_SERVICE_TOKEN, else reuse/create $settings_dir/service.token."""
+    token_file = SETTINGS_FILE.with_name("service.token")
+    env_token = os.getenv("JEV_SERVICE_TOKEN", "").strip()
+    if env_token:
+        try:
+            existing = ""
+            try:
+                existing = token_file.read_text(encoding="utf-8").strip()
+            except (FileNotFoundError, OSError):
+                pass
+            if existing != env_token:
+                write_private_text(token_file, env_token + "\n")
+        except OSError:
+            pass
+        return env_token
+    try:
+        existing = token_file.read_text(encoding="utf-8").strip()
+        if existing:
+            return existing
+    except (FileNotFoundError, OSError):
+        pass
+    token = secrets.token_urlsafe(32)
+    write_private_text(token_file, token + "\n")
+    return token
+
+
+def request_has_valid_service_token(headers: Headers, service_token: str) -> bool:
+    if not service_token:
+        return False
+    authorization = headers.get("authorization")
+    if authorization:
+        scheme, _, value = authorization.partition(" ")
+        if scheme.lower() == "bearer" and value and secrets.compare_digest(value, service_token):
+            return True
+    cookie_header = headers.get("cookie")
+    if cookie_header:
+        for part in cookie_header.split(";"):
+            name, sep, value = part.strip().partition("=")
+            if sep and name == SERVICE_TOKEN_COOKIE and value and secrets.compare_digest(value, service_token):
+                return True
+    return False
 
 
 def load_api_key_settings() -> tuple[list[dict[str, str]], str | None]:
@@ -52,11 +150,7 @@ def load_api_key_settings() -> tuple[list[dict[str, str]], str | None]:
 
 
 def save_api_key_settings(keys: list[dict[str, str]], active_id: str | None) -> None:
-    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    temporary = SETTINGS_FILE.with_suffix(".tmp")
-    temporary.write_text(json.dumps({"api_keys": keys, "active_api_key_id": active_id}), encoding="utf-8")
-    temporary.chmod(0o600)
-    temporary.replace(SETTINGS_FILE)
+    write_private_text(SETTINGS_FILE, json.dumps({"api_keys": keys, "active_api_key_id": active_id}))
 
 
 def active_api_key() -> str:
@@ -87,11 +181,7 @@ def hidden_examples() -> list[str]:
 
 
 def save_hidden_examples(names: list[str]) -> None:
-    EXAMPLES_FILE.parent.mkdir(parents=True, exist_ok=True)
-    temporary = EXAMPLES_FILE.with_suffix(".tmp")
-    temporary.write_text(json.dumps(names), encoding="utf-8")
-    temporary.chmod(0o600)
-    temporary.replace(EXAMPLES_FILE)
+    write_private_text(EXAMPLES_FILE, json.dumps(names))
 
 
 def history_connection() -> sqlite3.Connection:
@@ -101,7 +191,7 @@ def history_connection() -> sqlite3.Connection:
 
 
 def initialize_history() -> None:
-    HISTORY_DB.parent.mkdir(parents=True, exist_ok=True)
+    ensure_private_dir(HISTORY_DB.parent)
     with history_connection() as connection:
         connection.execute("""
             CREATE TABLE IF NOT EXISTS challenge_history (
@@ -130,7 +220,7 @@ def initialize_history() -> None:
             )
         """)
         connection.execute("CREATE INDEX IF NOT EXISTS idx_challenge_drafts_updated_at ON challenge_drafts(updated_at DESC)")
-    HISTORY_DB.chmod(0o600)
+    chmod_private_file(HISTORY_DB)
 
 
 def challenge_title(request_json: dict[str, Any]) -> str:
@@ -166,9 +256,11 @@ def store_challenge_history(request_json: dict[str, Any], response_json: dict[st
         )
     return int(cursor.lastrowid), title
 
-app = FastAPI(title="Jev Challenge Lab", version="2.0.0")
+app = FastAPI(title="Jev Challenge Lab", version="2.0.0", docs_url=None, redoc_url=None, openapi_url=None)
 app.state.api_keys, app.state.active_api_key_id = load_api_key_settings()
 initialize_history()
+SERVICE_TOKEN = resolve_service_token()
+app.state.service_token = SERVICE_TOKEN
 
 
 def allowed_request_host(host: str) -> bool:
@@ -189,8 +281,9 @@ def allowed_request_host(host: str) -> bool:
 
 
 class LocalRequestBoundary:
-    def __init__(self, wrapped_app):
+    def __init__(self, wrapped_app, service_token: str | None = None):
         self.wrapped_app = wrapped_app
+        self.service_token = service_token if service_token is not None else SERVICE_TOKEN
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -200,6 +293,7 @@ class LocalRequestBoundary:
         headers = Headers(scope=scope)
         hosts = headers.getlist("host")
         reason = None
+        status_code = 403
         if len(hosts) != 1 or not allowed_request_host(hosts[0]):
             reason = "Untrusted request host."
         else:
@@ -208,19 +302,57 @@ class LocalRequestBoundary:
             # QML may use a null Origin. Browsers cannot send this non-simple
             # header cross-origin without a preflight, which this guard denies.
             widget_request = headers.get("x-jev-widget") == "1"
-            if origin and origin != expected_origin and not (origin == "null" and widget_request):
+
+            def _widget_shell_origin(value: str | None) -> bool:
+                # Quickshell loads LabPanel from disk/qrc; XHR may send Origin/Referer
+                # as file://, qrc://, or the string "null" rather than http://127.0.0.1.
+                if value is None:
+                    return True
+                if value in {"", "null"}:
+                    return True
+                return value.startswith("file:") or value.startswith("qrc:")
+
+            if origin and origin != expected_origin and not (widget_request and _widget_shell_origin(origin)):
                 reason = "Untrusted request origin."
             referer = headers.get("referer")
-            if referer and not referer.startswith(expected_origin + "/"):
+            if referer and not referer.startswith(expected_origin + "/") and not (
+                widget_request and _widget_shell_origin(referer)
+            ):
                 reason = "Untrusted request origin."
             fetch_site = headers.get("sec-fetch-site")
-            if fetch_site and fetch_site not in {"same-origin", "none"}:
+            # Quickshell may label widget XHR as cross-site; the service token
+            # still authenticates those callers. Keep Host/Origin/token checks.
+            if (
+                fetch_site
+                and fetch_site not in {"same-origin", "none"}
+                and not widget_request
+            ):
                 reason = "Cross-site requests are not allowed."
+            path = scope.get("path") or ""
+            if reason is None and path.startswith("/api/") and not request_has_valid_service_token(headers, self.service_token):
+                reason = "Authentication required."
+                status_code = 401
 
         if reason:
-            await JSONResponse({"detail": reason}, status_code=403)(scope, receive, send)
+            await JSONResponse(
+                {"detail": reason},
+                status_code=status_code,
+                headers={"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY"},
+            )(scope, receive, send)
             return
-        await self.wrapped_app(scope, receive, send)
+
+        async def send_with_security_headers(message):
+            if message["type"] == "http.response.start":
+                raw_headers = list(message.get("headers", []))
+                header_names = {k.lower() for k, _ in raw_headers}
+                if b"x-content-type-options" not in header_names:
+                    raw_headers.append((b"x-content-type-options", b"nosniff"))
+                if b"x-frame-options" not in header_names:
+                    raw_headers.append((b"x-frame-options", b"DENY"))
+                message["headers"] = raw_headers
+            await send(message)
+
+        await self.wrapped_app(scope, receive, send_with_security_headers)
 
 
 app.add_middleware(LocalRequestBoundary)
@@ -272,11 +404,26 @@ def draft_title(draft: dict[str, Any]) -> str:
     return "Untitled Jev draft"
 
 
+def enforce_draft_size(draft: dict[str, Any]) -> str:
+    serialized = json.dumps(draft, ensure_ascii=False)
+    if len(serialized.encode("utf-8")) > MAX_DRAFT_JSON_BYTES:
+        raise HTTPException(status_code=413, detail="This draft is too large to save.")
+    return serialized
+
+
+def _utf8_size(value: Any) -> int:
+    if isinstance(value, str):
+        return len(value.encode("utf-8"))
+    return len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
+
+
 def validate_challenge(payload: JevChallengeRequest) -> dict[str, Any]:
     if not isinstance(payload.state, (str, dict, list)):
         raise HTTPException(status_code=422, detail="The scenario must be text, a JSON object, or a JSON list.")
     if isinstance(payload.state, str) and not payload.state.strip():
         raise HTTPException(status_code=422, detail="Enter a scenario for Jev to evaluate.")
+    if _utf8_size(payload.state) > MAX_CHALLENGE_STATE_BYTES:
+        raise HTTPException(status_code=413, detail="The scenario is too large.")
 
     clean_questions: dict[str, dict[str, Any]] = {}
     for raw_name, question in payload.questions.items():
@@ -291,6 +438,8 @@ def validate_challenge(payload: JevChallengeRequest) -> dict[str, Any]:
             raise HTTPException(status_code=422, detail=f"'{name}' has an unsupported question type.")
         if instructions is not None and not isinstance(instructions, (str, dict, list)):
             raise HTTPException(status_code=422, detail=f"'{name}' has invalid instructions.")
+        if instructions not in (None, "") and _utf8_size(instructions) > MAX_CRITERIA_VALUE_BYTES:
+            raise HTTPException(status_code=413, detail=f"Instructions for '{name}' are too large.")
 
         clean: dict[str, Any] = {"type": question_type}
         if instructions not in (None, ""):
@@ -301,16 +450,25 @@ def validate_challenge(payload: JevChallengeRequest) -> dict[str, Any]:
                 raise HTTPException(status_code=422, detail=f"Choice question '{name}' needs at least one option.")
             if len(criteria) > 255:
                 raise HTTPException(status_code=422, detail=f"Choice question '{name}' can have at most 255 options.")
+            for option_name, option_value in criteria.items():
+                if _utf8_size(option_name) > 80 or _utf8_size(option_value) > MAX_CRITERIA_VALUE_BYTES:
+                    raise HTTPException(status_code=413, detail=f"An option in '{name}' is too large.")
             clean["criteria"] = criteria
         elif question_type == "score":
             if not isinstance(criteria, list) or not criteria:
                 raise HTTPException(status_code=422, detail=f"Score question '{name}' needs at least one ordered level.")
             if len(criteria) > 10:
                 raise HTTPException(status_code=422, detail=f"Score question '{name}' can have at most 10 levels.")
+            for level in criteria:
+                if _utf8_size(level) > MAX_CRITERIA_VALUE_BYTES:
+                    raise HTTPException(status_code=413, detail=f"A score level in '{name}' is too large.")
             clean["criteria"] = criteria
         elif criteria is not None:
             if not isinstance(criteria, dict) or any(key not in {"true", "false"} for key in criteria):
                 raise HTTPException(status_code=422, detail=f"Noul criteria for '{name}' must define true and/or false.")
+            for option_value in criteria.values():
+                if _utf8_size(option_value) > MAX_CRITERIA_VALUE_BYTES:
+                    raise HTTPException(status_code=413, detail=f"Noul criteria for '{name}' are too large.")
             clean["criteria"] = criteria
         clean_questions[name] = clean
     return {"model": payload.model.strip(), "state": payload.state, "questions": clean_questions}
@@ -444,20 +602,16 @@ def restore_examples() -> dict[str, Any]:
 
 
 @app.get("/api/history")
-def list_history(limit: int = 0) -> dict[str, Any]:
+def list_history(limit: int = DEFAULT_HISTORY_LIST_ROWS, offset: int = 0) -> dict[str, Any]:
+    safe_limit = DEFAULT_HISTORY_LIST_ROWS if limit <= 0 else min(limit, MAX_HISTORY_LIST_ROWS)
+    safe_offset = max(0, offset)
     with history_connection() as connection:
-        if limit > 0:
-            safe_limit = min(limit, 5000)
-            rows = connection.execute(
-                "SELECT id, title, created_at, model, question_count, memo FROM challenge_history ORDER BY id DESC LIMIT ?",
-                (safe_limit,),
-            ).fetchall()
-        else:
-            rows = connection.execute(
-                "SELECT id, title, created_at, model, question_count, memo FROM challenge_history ORDER BY id DESC"
-            ).fetchall()
+        rows = connection.execute(
+            "SELECT id, title, created_at, model, question_count, memo FROM challenge_history ORDER BY id DESC LIMIT ? OFFSET ?",
+            (safe_limit, safe_offset),
+        ).fetchall()
         total = connection.execute("SELECT COUNT(*) FROM challenge_history").fetchone()[0]
-    return {"items": [dict(row) for row in rows], "total": total}
+    return {"items": [dict(row) for row in rows], "total": total, "limit": safe_limit, "offset": safe_offset}
 
 
 @app.get("/api/history/{history_id}")
@@ -501,18 +655,36 @@ def delete_history(history_id: int) -> dict[str, Any]:
 
 
 @app.get("/api/drafts")
-def list_drafts() -> dict[str, Any]:
+def list_drafts(limit: int = MAX_DRAFT_LIST_ROWS, offset: int = 0) -> dict[str, Any]:
+    safe_limit = MAX_DRAFT_LIST_ROWS if limit <= 0 else min(limit, MAX_DRAFT_LIST_ROWS)
+    safe_offset = max(0, offset)
     with history_connection() as connection:
+        total = connection.execute("SELECT COUNT(*) FROM challenge_drafts").fetchone()[0]
         rows = connection.execute(
-            "SELECT id, title, created_at, updated_at, is_complete, draft_json FROM challenge_drafts ORDER BY updated_at DESC, id DESC"
+            "SELECT id, title, created_at, updated_at, is_complete, draft_json FROM challenge_drafts ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?",
+            (safe_limit, safe_offset),
         ).fetchall()
-    items = [dict(row) for row in rows]
-    for item in items:
-        item["is_complete"] = bool(item["is_complete"])
-        draft = json.loads(item.pop("draft_json"))
-        widget = draft.get("_widget")
-        item["memo"] = str(draft.get("memo") or (widget.get("memo") if isinstance(widget, dict) else "") or "")
-    return {"items": items, "total": len(items)}
+    items = []
+    for row in rows:
+        item = {
+            "id": row["id"],
+            "title": row["title"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "is_complete": bool(row["is_complete"]),
+        }
+        try:
+            draft = json.loads(row["draft_json"])
+        except (TypeError, ValueError):
+            draft = {}
+        widget = draft.get("_widget") if isinstance(draft, dict) else None
+        item["memo"] = str(
+            (draft.get("memo") if isinstance(draft, dict) else None)
+            or (widget.get("memo") if isinstance(widget, dict) else "")
+            or ""
+        )
+        items.append(item)
+    return {"items": items, "total": total, "limit": safe_limit, "offset": safe_offset}
 
 
 @app.get("/api/drafts/{draft_id}")
@@ -536,12 +708,13 @@ def create_draft(payload: DraftCreate) -> dict[str, Any]:
     title = " ".join(payload.title.split()) if payload.title else draft_title(payload.draft)
     if not title:
         title = "Untitled Jev draft"
+    draft_json = enforce_draft_size(payload.draft)
     now = datetime.now(timezone.utc).isoformat()
     with history_connection() as connection:
         cursor = connection.execute(
             """INSERT INTO challenge_drafts (title, created_at, updated_at, is_complete, draft_json)
                VALUES (?, ?, ?, ?, ?)""",
-            (title, now, now, int(payload.is_complete), json.dumps(payload.draft, ensure_ascii=False)),
+            (title, now, now, int(payload.is_complete), draft_json),
         )
     return {"id": int(cursor.lastrowid), "title": title, "is_complete": payload.is_complete, "updated_at": now}
 
@@ -557,7 +730,7 @@ def update_draft(draft_id: int, payload: DraftUpdate) -> dict[str, Any]:
             title = " ".join(payload.title.split())
             if not title:
                 raise HTTPException(status_code=422, detail="Enter a name for this draft.")
-        draft_json = current["draft_json"] if payload.draft is None else json.dumps(payload.draft, ensure_ascii=False)
+        draft_json = current["draft_json"] if payload.draft is None else enforce_draft_size(payload.draft)
         is_complete = current["is_complete"] if payload.is_complete is None else int(payload.is_complete)
         updated_at = datetime.now(timezone.utc).isoformat()
         connection.execute(
@@ -590,7 +763,11 @@ async def jev_challenge(payload: JevChallengeRequest) -> dict[str, Any]:
                 provider_detail = response.json().get("detail")
             except Exception:
                 provider_detail = None
-            raise HTTPException(status_code=response.status_code, detail=provider_detail or f"Jev rejected the request (HTTP {response.status_code}).")
+            logger.warning("Jev provider error HTTP %s: %s", response.status_code, provider_detail)
+            raise HTTPException(
+                status_code=502 if response.status_code >= 500 else 400,
+                detail=f"Jev rejected the request (HTTP {response.status_code}).",
+            )
         data = response.json()
     except HTTPException:
         raise
@@ -604,6 +781,51 @@ async def jev_challenge(payload: JevChallengeRequest) -> dict[str, Any]:
 
 
 app.mount("/assets", StaticFiles(directory=FRONTEND), name="assets")
+
+
+def _set_service_token_cookie(response) -> None:
+    response.set_cookie(
+        key=SERVICE_TOKEN_COOKIE,
+        value=SERVICE_TOKEN,
+        httponly=True,
+        samesite="strict",
+        path="/",
+        max_age=365 * 24 * 60 * 60,
+    )
+
+
+@app.post("/api/session/cookie")
+def issue_session_cookie() -> JSONResponse:
+    """Exchange a valid Bearer token for an HttpOnly cookie (same-origin browser UI)."""
+    response = JSONResponse({"ok": True})
+    _set_service_token_cookie(response)
+    return response
+
+
+@app.post("/api/session/prepare-browser")
+def prepare_browser_session() -> dict[str, Any]:
+    """Launcher-only: arm a short one-shot claim window for the next same-origin browser."""
+    global _browser_claim_deadline
+    _browser_claim_deadline = time.monotonic() + BROWSER_CLAIM_WINDOW_SECONDS
+    return {"ok": True, "claim_window_seconds": BROWSER_CLAIM_WINDOW_SECONDS}
+
+
+@app.post("/session/claim")
+def claim_browser_session() -> JSONResponse:
+    """Consume a pending prepare-browser window and set the service cookie. Not under /api/."""
+    global _browser_claim_deadline
+    deadline = _browser_claim_deadline
+    _browser_claim_deadline = None
+    if deadline is None or time.monotonic() > deadline:
+        raise HTTPException(status_code=401, detail="No browser session is pending.")
+    response = JSONResponse({"ok": True})
+    _set_service_token_cookie(response)
+    return response
+
+
+@app.get("/")
+def index() -> FileResponse:
+    return FileResponse(FRONTEND / "index.html")
 
 
 @app.get("/{path:path}")

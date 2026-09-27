@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 import qs.Ui
 import "LabModel.js" as LabModel
 import "LabExamples.js" as LabExamples
@@ -15,6 +16,7 @@ Panel {
   property var hostWidget: null
   property var editor: LabModel.emptyEditor()
   property string currentTab: "compose"
+  onCurrentTabChanged: root.keyMessage = ""
   property string savedKind: "drafts"
   property var savedItems: []
   property string importText: ""
@@ -43,16 +45,73 @@ Panel {
   readonly property string launcherPath: decodeURIComponent(
     String(Qt.resolvedUrl("bin/launch-jev-challenge-lab")).replace(/^file:\/\//, "")
   )
+  property string serviceToken: ""
+  property string keyMessage: ""
+  property bool keyMessageError: false
+
+  readonly property string serviceTokenPath: {
+    var stateHome = ""
+    try { stateHome = String(Quickshell.env("XDG_STATE_HOME") || "") } catch (error) {}
+    if (!stateHome) {
+      var home = ""
+      try { home = String(Quickshell.env("HOME") || "") } catch (error) {}
+      if (home) stateHome = home + "/.local/state"
+    }
+    if (!stateHome) return ""
+    return stateHome + "/jev-challenge-lab/service.token"
+  }
+
+  // Quickshell cannot reliably XHR file:// secrets; FileView with blockLoading
+  // matches other Omarchy plugins and supplies the Bearer token for /api calls.
+  FileView {
+    id: serviceTokenFile
+    path: root.serviceTokenPath
+    watchChanges: false
+    preload: true
+    blockLoading: true
+    printErrors: false
+    onLoaded: root.applyServiceTokenText(text())
+  }
+
+  function applyServiceTokenText(raw) {
+    var cleaned = String(raw || "").replace(/^\s+|\s+$/g, "").replace(/[\r\n]/g, "")
+    serviceToken = cleaned
+    return cleaned.length > 0
+  }
+
+  function loadServiceToken() {
+    if (!serviceTokenPath) {
+      serviceToken = ""
+      return false
+    }
+    try {
+      serviceTokenFile.path = serviceTokenPath
+      return root.applyServiceTokenText(serviceTokenFile.text())
+    } catch (error) {
+      serviceToken = ""
+      return false
+    }
+  }
 
   function request(method, path, payload, callback) {
+    if (!serviceToken && !loadServiceToken()) {
+      callback("Local service token missing. Start the lab from its launcher once.", null)
+      return
+    }
     var xhr = new XMLHttpRequest()
     xhr.open(method, baseUrl + path)
     xhr.setRequestHeader("Content-Type", "application/json")
     xhr.setRequestHeader("X-Jev-Widget", "1")
+    xhr.setRequestHeader("Authorization", "Bearer " + serviceToken)
     xhr.onreadystatechange = function() {
       if (xhr.readyState !== 4) return
       var data = null
       try { data = JSON.parse(xhr.responseText || "null") } catch (error) {}
+      if (xhr.status === 401) {
+        serviceToken = ""
+        callback("Local service token rejected. Restart the lab from its launcher.", data)
+        return
+      }
       if (xhr.status >= 200 && xhr.status < 300) callback(null, data)
       else callback(data && data.detail ? String(data.detail) : "The local service is unavailable.", data)
     }
@@ -61,10 +120,11 @@ Panel {
   }
 
   function checkHealth() {
+    if (!serviceToken) loadServiceToken()
     request("GET", "/api/health", null, function(error, data) {
       if (error) {
         serviceReady = false
-        statusText = "Starting local Jev service…"
+        statusText = error.indexOf("token") >= 0 ? error : "Starting local Jev service…"
         return
       }
       serviceReady = true
@@ -465,13 +525,33 @@ Panel {
   }
 
   function saveKey(name, value) {
-    if (!name.trim()) { statusText = "Enter a name for this key"; return }
-    if (!value.trim()) { statusText = "Enter a TypeSafe API key"; return }
-    request("POST", "/api/settings/api-keys", { name: name.trim(), api_key: value.trim() }, function(error, data) {
-      if (error) { statusText = error; return }
+    keyMessage = ""
+    var trimmedName = name.trim()
+    var trimmedValue = value.trim()
+    if (!trimmedName) {
+      keyMessage = "Enter a name for this key"
+      keyMessageError = true
+      statusText = keyMessage
+      return
+    }
+    if (!trimmedValue || trimmedValue.length < 16) {
+      keyMessage = "Enter a valid TypeSafe API key (at least 16 characters)"
+      keyMessageError = true
+      statusText = keyMessage
+      return
+    }
+    request("POST", "/api/settings/api-keys", { name: trimmedName, api_key: trimmedValue }, function(error, data) {
+      if (error) {
+        keyMessage = error
+        keyMessageError = true
+        statusText = error
+        return
+      }
       connected = data.jev_connected === true
       apiKeys = data.keys || []
       activeKeyId = data.active_id || ""
+      keyMessage = "API key saved and selected"
+      keyMessageError = false
       statusText = "API key saved and selected"
       keyNameField.text = ""
       keyField.text = ""
@@ -630,6 +710,7 @@ Panel {
               color: root.connected ? "#c7ff69" : "#f0b35d"
             }
             Text {
+              textFormat: Text.PlainText
               text: root.connected ? "Jev connected" : "Add API key"
               color: "#e7eee0"
               font.pixelSize: 12
@@ -680,12 +761,14 @@ Panel {
                     anchors.centerIn: parent
                     spacing: 2
                     Text {
+                      textFormat: Text.PlainText
                       text: modelData.level
                       color: root.selectedExample === modelData.key ? "#a9cb7b" : "#496333"
                       font.pixelSize: 9
                       font.bold: true
                     }
                     Text {
+                      textFormat: Text.PlainText
                       id: exampleTitle
                       text: modelData.title.toUpperCase()
                       color: root.selectedExample === modelData.key ? "#c7ff69" : "#080a09"
@@ -1206,6 +1289,7 @@ Panel {
                     text: root.resultItems.length
                       ? "Plain-language decisions and visual probabilities"
                       : "Your answer appears here after you ask Jev."
+                    textFormat: Text.PlainText
                     color: "#c7d1c2"
                     font.pixelSize: 12
                     wrapMode: Text.WordWrap
@@ -1226,6 +1310,7 @@ Panel {
                   anchors.margins: 16
                   spacing: 12
                   Text {
+                    textFormat: Text.PlainText
                     text: root.resultText ? "JEV IS WORKING" : "READY FOR YOUR CHALLENGE"
                     color: "#426417"
                     font.pixelSize: 11
@@ -1323,6 +1408,7 @@ Panel {
                             wrapMode: Text.WordWrap
                           }
                           Text {
+                            textFormat: Text.PlainText
                             text: modelData.percent + "%"
                             color: "#111a10"
                             font.pixelSize: 11
@@ -1385,7 +1471,8 @@ Panel {
           visible: root.currentTab === "saved"
           spacing: 12
           Text { text: "SAVED WORK"; color: "#080a09"; font.pixelSize: 22; font.bold: true }
-          Text { text: "Open, rename, or delete drafts and executed challenges saved on this machine."; color: "#4d594b"; font.pixelSize: 12 }
+          Text {                     textFormat: Text.PlainText
+text: "Open, rename, or delete drafts and executed challenges saved on this machine."; color: "#4d594b"; font.pixelSize: 12 }
           RowLayout {
             LabButton { text: "Drafts"; accent: root.savedKind === "drafts"; onClicked: { root.savedKind = "drafts"; root.loadSaved() } }
             LabButton { text: "Executed challenges"; accent: root.savedKind === "history"; onClicked: { root.savedKind = "history"; root.loadSaved() } }
@@ -1524,7 +1611,18 @@ Panel {
             echoMode: TextInput.Password
             placeholderText: "Paste your TypeSafe API key"
           }
-          LabButton { text: "Save and use key"; accent: true; onClicked: root.saveKey(keyNameField.text, keyField.text) }
+          RowLayout {
+            spacing: 12
+            LabButton { text: "Save and use key"; accent: true; onClicked: root.saveKey(keyNameField.text, keyField.text) }
+            Text {
+              textFormat: Text.PlainText
+              text: root.keyMessage
+              color: root.keyMessageError ? "#ff8080" : "#a9cb7b"
+              font.pixelSize: 12
+              visible: root.keyMessage !== ""
+              Layout.fillWidth: true
+            }
+          }
           Item { Layout.fillHeight: true }
         }
       }

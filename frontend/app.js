@@ -7,8 +7,22 @@ function escapeHtml(value = "") {
   })[char]);
 }
 
+let sessionClaimAttempted = false;
+
+async function ensureBrowserSession() {
+  if (sessionClaimAttempted) return;
+  sessionClaimAttempted = true;
+  try {
+    await fetch("/session/claim", { method: "POST", credentials: "same-origin" });
+  } catch (_) {
+    /* Launcher may not have armed a claim window; cookie may already exist. */
+  }
+}
+
 async function api(path, options = {}) {
+  await ensureBrowserSession();
   const response = await fetch(path, {
+    credentials: "same-origin",
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
   });
@@ -18,6 +32,9 @@ async function api(path, options = {}) {
       const detail = (await response.json()).detail;
       message = typeof detail === "string" ? detail : JSON.stringify(detail || message);
     } catch (_) { /* response was not JSON */ }
+    if (response.status === 401) {
+      message = "Local authentication required. Open the lab from its launcher.";
+    }
     throw new Error(message);
   }
   return response.json();

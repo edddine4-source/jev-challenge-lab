@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 
 TextArea {
+  textFormat: TextEdit.PlainText
   color: "#101510"
   placeholderTextColor: "#7a8277"
   selectionColor: "#c7ff69"
