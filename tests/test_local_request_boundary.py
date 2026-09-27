@@ -220,7 +220,7 @@ class LocalRequestBoundaryTests(unittest.IsolatedAsyncioTestCase):
                 )
         self.assertEqual(response.status_code, 413)
 
-    async def test_session_cookie_exchange_and_claim(self):
+    async def test_session_cookie_exchange(self):
         async def inline_handler(function, *args, **kwargs):
             return function(*args, **kwargs)
 
@@ -230,32 +230,14 @@ class LocalRequestBoundaryTests(unittest.IsolatedAsyncioTestCase):
             with patch("fastapi.routing.run_in_threadpool", side_effect=inline_handler):
                 denied = await client.post("/api/session/cookie")
                 issued = await client.post("/api/session/cookie", headers=AUTH)
-                # Unauthenticated claim or claim without ticket is rejected
-                claim_no_ticket = await client.post("/session/claim", json={})
-                claim_cold = await client.post("/session/claim", json={"ticket": "unarmed-ticket-value"})
-                # Armed preparation returns an ephemeral ticket
-                prepared = await client.post("/api/session/prepare-browser", headers=AUTH)
-                ticket = prepared.json().get("ticket")
-                # Wrong ticket is rejected
-                claim_wrong = await client.post("/session/claim", json={"ticket": "wrong-ticket-value"})
-                # Arm again to get fresh ticket since attempt consumed/tested
-                prepared = await client.post("/api/session/prepare-browser", headers=AUTH)
-                ticket = prepared.json().get("ticket")
-                # Correct ticket is accepted and sets cookie
-                claimed = await client.post("/session/claim", json={"ticket": ticket})
-                # Replay/second claim with same ticket is rejected
-                claim_again = await client.post("/session/claim", json={"ticket": ticket})
+                # Retired claim endpoints are completely removed (404)
+                claim = await client.post("/session/claim")
+                prepare = await client.post("/api/session/prepare-browser", headers=AUTH)
         self.assertEqual(denied.status_code, 401)
         self.assertEqual(issued.status_code, 200)
         self.assertIn(SERVICE_TOKEN_COOKIE, issued.headers.get("set-cookie", ""))
-        self.assertEqual(claim_no_ticket.status_code, 422)
-        self.assertEqual(claim_cold.status_code, 401)
-        self.assertEqual(prepared.status_code, 200)
-        self.assertTrue(bool(ticket))
-        self.assertEqual(claim_wrong.status_code, 401)
-        self.assertEqual(claimed.status_code, 200)
-        self.assertIn(SERVICE_TOKEN_COOKIE, claimed.headers.get("set-cookie", ""))
-        self.assertEqual(claim_again.status_code, 401)
+        self.assertEqual(claim.status_code, 405)
+        self.assertEqual(prepare.status_code, 405)
 
     def test_private_write_creates_0600_and_700_parent(self):
         target = Path(_state_dir.name) / "nested" / "secret.json"

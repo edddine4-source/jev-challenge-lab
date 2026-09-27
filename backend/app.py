@@ -34,10 +34,7 @@ MAX_CRITERIA_VALUE_BYTES = 16_000
 MAX_HISTORY_LIST_ROWS = 200
 MAX_DRAFT_LIST_ROWS = 200
 DEFAULT_HISTORY_LIST_ROWS = 50
-BROWSER_CLAIM_WINDOW_SECONDS = 15
 logger = logging.getLogger("jev-challenge-lab")
-_browser_claim_ticket: str | None = None
-_browser_claim_deadline: float | None = None
 
 
 def ensure_private_dir(path: Path) -> None:
@@ -389,10 +386,6 @@ class DraftUpdate(BaseModel):
     draft: dict[str, Any] | None = None
     is_complete: bool | None = None
     title: str | None = Field(default=None, max_length=120)
-
-
-class BrowserClaimPayload(BaseModel):
-    ticket: str = Field(min_length=16, max_length=128)
 
 
 def draft_title(draft: dict[str, Any]) -> str:
@@ -802,36 +795,6 @@ def _set_service_token_cookie(response) -> None:
 @app.post("/api/session/cookie")
 def issue_session_cookie() -> JSONResponse:
     """Exchange a valid Bearer token for an HttpOnly cookie (same-origin browser UI)."""
-    response = JSONResponse({"ok": True})
-    _set_service_token_cookie(response)
-    return response
-
-
-@app.post("/api/session/prepare-browser")
-def prepare_browser_session() -> dict[str, Any]:
-    """Launcher-only: arm a short one-shot claim window with an ephemeral ticket."""
-    global _browser_claim_ticket, _browser_claim_deadline
-    ticket = secrets.token_urlsafe(32)
-    _browser_claim_ticket = ticket
-    _browser_claim_deadline = time.monotonic() + BROWSER_CLAIM_WINDOW_SECONDS
-    return {"ok": True, "ticket": ticket, "claim_window_seconds": BROWSER_CLAIM_WINDOW_SECONDS}
-
-
-@app.post("/session/claim")
-def claim_browser_session(payload: BrowserClaimPayload) -> JSONResponse:
-    """Consume a pending prepare-browser ticket and set the service cookie. Requires the ephemeral ticket."""
-    global _browser_claim_ticket, _browser_claim_deadline
-    expected_ticket = _browser_claim_ticket
-    deadline = _browser_claim_deadline
-    _browser_claim_ticket = None
-    _browser_claim_deadline = None
-    if (
-        expected_ticket is None
-        or deadline is None
-        or time.monotonic() > deadline
-        or not secrets.compare_digest(payload.ticket.strip(), expected_ticket)
-    ):
-        raise HTTPException(status_code=401, detail="Invalid or expired browser session claim ticket.")
     response = JSONResponse({"ok": True})
     _set_service_token_cookie(response)
     return response

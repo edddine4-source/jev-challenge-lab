@@ -186,6 +186,24 @@
           </div>
         </section>
     </main>
+    <div class="service-auth-overlay" id="serviceAuthOverlay" hidden>
+      <div class="service-auth-modal" role="dialog" aria-labelledby="serviceAuthTitle">
+        <div class="service-auth-header">
+          <span class="brand-mark"><i></i></span>
+          <h2 id="serviceAuthTitle">Authentication Required</h2>
+          <p>This local service requires caller authentication. Enter your local service token to unlock:</p>
+        </div>
+        <form id="serviceAuthForm">
+          <label for="serviceTokenInput">Local Service Token</label>
+          <input id="serviceTokenInput" type="password" autocomplete="current-password" placeholder="Token from service.token" required />
+          <small class="service-auth-hint">Found on your machine in <code>~/.local/state/jev-challenge-lab/service.token</code></small>
+          <div class="service-auth-actions">
+            <button type="submit" id="submitServiceAuth">Connect</button>
+          </div>
+          <p id="serviceAuthError" class="service-auth-error" hidden></p>
+        </form>
+      </div>
+    </div>
     <div class="toast" id="toast" role="status"></div>
     <script src="/assets/app.js" defer></script>
   </body>

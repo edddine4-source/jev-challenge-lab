@@ -7,49 +7,25 @@ function escapeHtml(value = "") {
   })[char]);
 }
 
-let sessionClaimAttempted = false;
-
-function extractClaimTicket() {
-  const hash = window.location.hash || "";
-  if (hash.startsWith("#")) {
-    const params = new URLSearchParams(hash.slice(1));
-    const ticket = params.get("claim_ticket");
-    if (ticket) {
-      history.replaceState(null, "", window.location.pathname + window.location.search);
-      return ticket;
+function setServiceAuthModal(open, error = "") {
+  const overlay = $("#serviceAuthOverlay");
+  const errorEl = $("#serviceAuthError");
+  if (!overlay) return;
+  overlay.hidden = !open;
+  if (errorEl) {
+    errorEl.textContent = error;
+    errorEl.hidden = !error;
+  }
+  if (open) {
+    const input = $("#serviceTokenInput");
+    if (input) {
+      input.value = "";
+      input.focus();
     }
-  }
-  const queryParams = new URLSearchParams(window.location.search);
-  const queryTicket = queryParams.get("claim_ticket");
-  if (queryTicket) {
-    queryParams.delete("claim_ticket");
-    const newSearch = queryParams.toString();
-    history.replaceState(null, "", window.location.pathname + (newSearch ? `?${newSearch}` : "") + window.location.hash);
-    return queryTicket;
-  }
-  return "";
-}
-
-const pendingClaimTicket = extractClaimTicket();
-
-async function ensureBrowserSession() {
-  if (sessionClaimAttempted) return;
-  sessionClaimAttempted = true;
-  if (!pendingClaimTicket) return;
-  try {
-    await fetch("/session/claim", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ticket: pendingClaimTicket }),
-    });
-  } catch (_) {
-    /* Launcher may not have armed a claim window; cookie may already exist. */
   }
 }
 
 async function api(path, options = {}) {
-  await ensureBrowserSession();
   const response = await fetch(path, {
     credentials: "same-origin",
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
@@ -62,7 +38,8 @@ async function api(path, options = {}) {
       message = typeof detail === "string" ? detail : JSON.stringify(detail || message);
     } catch (_) { /* response was not JSON */ }
     if (response.status === 401) {
-      message = "Local authentication required. Open the lab from its launcher.";
+      setServiceAuthModal(true);
+      message = "Local authentication required. Enter your service token to connect.";
     }
     throw new Error(message);
   }
@@ -1209,6 +1186,45 @@ $("#apiKeyPanel").addEventListener("submit", async (event) => {
     button.textContent = "Save and use";
   }
 });
+
+const serviceAuthForm = $("#serviceAuthForm");
+if (serviceAuthForm) {
+  serviceAuthForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const token = $("#serviceTokenInput").value.trim();
+    const submitBtn = $("#submitServiceAuth");
+    if (!token) return;
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Connecting…";
+    try {
+      const res = await fetch("/api/session/cookie", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) {
+        let errMessage = "Invalid service token.";
+        try {
+          const err = await res.json();
+          if (err && err.detail) errMessage = err.detail;
+        } catch (_) {}
+        throw new Error(errMessage);
+      }
+      setServiceAuthModal(false);
+      showToast("Connected to local service");
+      await showConnectionStatus();
+      await loadHistory(false);
+    } catch (error) {
+      setServiceAuthModal(true, error.message);
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Connect";
+    }
+  });
+}
 
 showConnectionStatus();
 loadHistory(false);

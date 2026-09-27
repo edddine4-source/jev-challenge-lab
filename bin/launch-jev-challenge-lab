@@ -10,6 +10,7 @@ data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/jev-challenge-lab"
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/jev-challenge-lab"
 log_file="$state_dir/service.log"
 token_file="$state_dir/service.token"
+curl_config="$state_dir/curl.conf"
 url="http://127.0.0.1:8766"
 system_python=/usr/bin/python3
 
@@ -24,6 +25,11 @@ ensure_service_token() {
     chmod 600 "$token_file"
   fi
   chmod 600 "$token_file" 2>/dev/null || true
+
+  umask 077
+  token=$(tr -d '\n\r' <"$token_file")
+  printf 'header = "Authorization: Bearer %s"\n' "$token" >"$curl_config"
+  chmod 600 "$curl_config" 2>/dev/null || true
 }
 
 ensure_service_token
@@ -37,7 +43,7 @@ notify_error() {
 
 is_our_service_running() {
   curl --fail --silent --max-time 1 \
-    -H "Authorization: Bearer ${JEV_SERVICE_TOKEN}" \
+    --config "$curl_config" \
     "$url/api/health" >/dev/null 2>&1
 }
 
@@ -79,6 +85,8 @@ if ! is_our_service_running; then
   nohup "$venv_dir/bin/python" -m uvicorn backend.app:app \
     --app-dir "$plugin_dir" --host 127.0.0.1 --port 8766 --log-level warning \
     >>"$log_file" 2>&1 < /dev/null &
+  server_pid=$!
+  disown "$server_pid" 2>/dev/null || true
 
   ready=false
   for _ in $(seq 1 40); do
@@ -95,13 +103,5 @@ if ! is_our_service_running; then
 fi
 
 if [ "${1:-}" != "--service-only" ]; then
-  # Arm a short one-shot claim window and retrieve the ephemeral single-use ticket.
-  claim_ticket=$(curl --fail --silent --max-time 2 \
-    -H "Authorization: Bearer ${JEV_SERVICE_TOKEN}" \
-    -X POST "$url/api/session/prepare-browser" | "$system_python" -c "import sys, json; print(json.load(sys.stdin).get('ticket', ''))" 2>/dev/null || true)
-  if [ -n "$claim_ticket" ]; then
-    xdg-open "${url}/#claim_ticket=${claim_ticket}" >/dev/null 2>&1 &
-  else
-    xdg-open "${url}/" >/dev/null 2>&1 &
-  fi
+  xdg-open "${url}/" >/dev/null 2>&1 &
 fi
